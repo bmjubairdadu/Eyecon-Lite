@@ -28,12 +28,19 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -69,11 +76,15 @@ import androidx.compose.ui.unit.sp
 import com.eyeconlite.data.CardImageMaker
 import com.eyeconlite.data.CallerInfo
 import com.eyeconlite.data.EyeconApi
+import com.eyeconlite.data.PhoneUtils
 import com.eyeconlite.ui.theme.EyeconLiteTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -162,8 +173,10 @@ fun SearchScreen() {
 
     fun doSearch(number: String) {
         val q = number.trim()
-        if (q.filter { it.isDigit() }.length < 7) {
-            error = "Valid mobile number likhun (min 7 digit)"
+        try {
+            PhoneUtils.normalize(q)
+        } catch (e: IllegalArgumentException) {
+            error = e.message ?: "Valid mobile number likhun"
             return
         }
         scope.launch {
@@ -287,7 +300,7 @@ fun SearchScreen() {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
-                        placeholder = { Text("e.g. 8801XXXXXXXXX", color = Color.Gray) },
+                        placeholder = { Text("+880 17XX-XXXXXX / 017XXXXXXXX", color = Color.Gray) },
                         leadingIcon = {
                             Icon(Icons.Filled.Call, null, tint = Color(0xFF2196F3))
                         },
@@ -311,6 +324,31 @@ fun SearchScreen() {
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    val normPreview = remember(query) {
+                        try {
+                            if (query.trim().isEmpty()) null else PhoneUtils.normalize(query)
+                        } catch (_: Exception) { null }
+                    }
+                    if (normPreview != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "${normPreview.countryFlag} ${normPreview.prettyInternational} • ${normPreview.countryName}",
+                            color = Color(0xFF8FDE8F),
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            "${normPreview.operator} • ${normPreview.numberType} • National: ${normPreview.nationalFormat}",
+                            color = Color.Gray,
+                            fontSize = 11.sp
+                        )
+                    } else if (query.trim().isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Formats: +8801XXXXXXXXX, 008801..., 01XXXXXXXXX",
+                            color = Color.Gray,
+                            fontSize = 11.sp
+                        )
+                    }
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = { doSearch(query) },
@@ -461,9 +499,25 @@ fun ResultCard(info: CallerInfo, saving: Boolean, onDownload: () -> Unit) {
 
             Spacer(Modifier.height(14.dp))
             // info rows
-            DetailRow("Number", info.phone)
-            DetailRow("Name", info.name.ifBlank { "Unknown" })
-            DetailRow("Source", "Eyecon")
+            val n = info.normalized
+            DetailRow("Name", info.name.ifBlank { "Unknown" }, Icons.Filled.Person)
+            DetailRow("International", n?.prettyInternational ?: info.phone, Icons.Filled.Phone)
+            DetailRow("National", n?.nationalFormat ?: "—", Icons.Filled.Call)
+            DetailRow(
+                "Country",
+                if (n != null) "${n.countryFlag} ${n.countryName} (+${n.countryCode})" else "—",
+                Icons.Filled.LocationOn
+            )
+            DetailRow("Operator", n?.operator ?: "—", Icons.Filled.SimCard)
+            DetailRow("Type", n?.numberType ?: "—", Icons.Filled.Info)
+            DetailRow("Tag", info.tag.ifBlank { "—" }, Icons.Filled.Badge)
+            DetailRow("Photo", info.photoStatus, Icons.Filled.Image)
+            DetailRow("Source", "Eyecon", Icons.Filled.Public)
+            DetailRow(
+                "Checked",
+                SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date(info.checkedAt)),
+                Icons.Filled.History
+            )
 
             Spacer(Modifier.height(16.dp))
             Button(
@@ -499,7 +553,11 @@ fun ResultCard(info: CallerInfo, saving: Boolean, onDownload: () -> Unit) {
 }
 
 @Composable
-fun DetailRow(label: String, value: String) {
+fun DetailRow(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -509,8 +567,23 @@ fun DetailRow(label: String, value: String) {
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF5B7A99))
-        Spacer(Modifier.width(12.dp))
-        Text(value, fontSize = 15.sp, color = Color(0xFF0A1628), fontWeight = FontWeight.Medium)
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = Color(0xFF2196F3), modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            label,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = Color(0xFF5B7A99),
+            modifier = Modifier.width(100.dp)
+        )
+        Text(
+            value,
+            fontSize = 15.sp,
+            color = Color(0xFF0A1628),
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
     }
 }

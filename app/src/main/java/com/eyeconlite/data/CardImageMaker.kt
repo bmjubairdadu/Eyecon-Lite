@@ -149,29 +149,38 @@ object CardImageMaker {
         p.color = 0x33FFFFFF.toInt()
         c.drawRect(150f, y, (W - 150).toFloat(), y + 2f, p)
 
-        // --- detail rows ---
-        y += 28f
+        // --- detail rows (single-line, compact) ---
+        y += 22f
         p.textAlign = Paint.Align.LEFT
-        val date = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date())
+        val date = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date(info.checkedAt))
+        val nn = info.normalized
         val rows = listOf(
-            "Name" to info.name.ifBlank { "Unknown" },
-            "Number" to phone,
+            "Country" to if (nn != null) "${nn.countryFlag} ${nn.countryName} (+${nn.countryCode})" else "—",
+            "Operator" to (nn?.operator ?: "—"),
+            "Type" to (nn?.numberType ?: "—"),
+            "National" to (nn?.nationalFormat ?: phone),
+            "Intl" to (nn?.prettyInternational ?: phone),
             "Tag" to info.tag.ifBlank { "—" },
-            "Source" to "Eyecon",
+            "Photo" to info.photoStatus,
             "Checked" to date
         )
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF8FB4D8.toInt()
+            textSize = 26f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFFFFFF.toInt()
+            textSize = 34f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
         for ((label, value) in rows) {
-            y += 70f
-            p.color = 0xFF8FB4D8.toInt()
-            p.textSize = 28f
-            p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            c.drawText(label.uppercase(), 150f, y, p)
-            y += 46f
-            p.color = 0xFFFFFFFF.toInt()
-            p.textSize = 40f
-            p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            c.drawText(fitText(value, p, 780f), 150f, y, p)
-            y += 10f
+            y += 58f
+            val lab = label.uppercase() + "  "
+            c.drawText(lab, 150f, y, labelPaint)
+            val lw = labelPaint.measureText(lab)
+            val maxW = W - 150f - lw - 40f
+            c.drawText(fitText(value, valuePaint, maxW), 150f + lw, y, valuePaint)
         }
 
         // --- footer logo + text ---
