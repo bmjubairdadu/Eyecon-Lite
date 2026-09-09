@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
@@ -31,31 +32,65 @@ object CardImageMaker {
         val c = Canvas(bmp)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        // --- background: deep navy gradient ---
+        // --- premium background: deep navy + ambient gold/blue glows ---
         p.shader = LinearGradient(
-            0f, 0f, 0f, H.toFloat(),
-            intArrayOf(0xFF0A1628.toInt(), 0xFF10294D.toInt(), 0xFF0B1C36.toInt()),
-            floatArrayOf(0f, 0.55f, 1f),
+            0f, 0f, W.toFloat(), H.toFloat(),
+            intArrayOf(0xFF060D1A.toInt(), 0xFF0B1E3A.toInt(), 0xFF05090F.toInt()),
+            floatArrayOf(0f, 0.5f, 1f),
             Shader.TileMode.CLAMP
         )
         c.drawRect(0f, 0f, W.toFloat(), H.toFloat(), p)
         p.shader = null
 
-        // --- top glow blob (blue) ---
-        p.color = 0xFF2196F3.toInt()
-        p.alpha = 46
-        c.drawCircle(W / 2f, 250f, 520f, p)
+        drawGlow(c, W * 0.88f, 180f, 520f, 0xFFD4AF37.toInt(), 52)
+        drawGlow(c, W * 0.08f, H * 0.72f, 560f, 0xFF2196F3.toInt(), 46)
+        drawGlow(c, W * 0.5f, H * 0.45f, 720f, 0xFF14335C.toInt(), 60)
+
+        // subtle dot texture
+        p.color = 0xFFFFFFFF.toInt()
+        var dotY = 340f
+        while (dotY < H - 220) {
+            var dotX = 70f
+            while (dotX < W - 60) {
+                p.alpha = 12
+                c.drawCircle(dotX, dotY, 2.2f, p)
+                dotX += 58f
+            }
+            dotY += 58f
+        }
         p.alpha = 255
 
-        // --- blue top accent bar ---
-        p.color = 0xFF2196F3.toInt()
-        c.drawRoundRect(RectF(60f, 60f, (W - 60).toFloat(), 76f), 8f, 8f, p)
+        // vignette edges
+        p.shader = RadialGradient(
+            W / 2f, H / 2f, 1150f,
+            intArrayOf(0x00000000, 0x99000000.toInt()),
+            floatArrayOf(0.55f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        c.drawRect(0f, 0f, W.toFloat(), H.toFloat(), p)
+        p.shader = null
 
-        // --- header: app logo + brand (left), data pill (right) ---
-        val headerCx = W / 2f
+        // premium frame: gold hairline + gold top beam
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 3f
+        p.color = 0xFFD4AF37.toInt()
+        p.alpha = 130
+        c.drawRoundRect(RectF(22f, 22f, W - 22f, H - 22f), 40f, 40f, p)
+        p.alpha = 255
+        p.style = Paint.Style.FILL
+        p.shader = LinearGradient(
+            0f, 0f, W.toFloat(), 0f,
+            intArrayOf(0xFF9A7B1E.toInt(), 0xFFF5D67B.toInt(), 0xFFD4AF37.toInt(), 0xFFF5D67B.toInt(), 0xFF9A7B1E.toInt()),
+            null, Shader.TileMode.CLAMP
+        )
+        c.drawRoundRect(RectF(48f, 46f, W - 48f, 58f), 6f, 6f, p)
+        p.shader = null
+
+        // --- premium header: gold-ring logo + two-tone brand + verified seal ---
         val logoCx = 150f
-        val logoCy = 205f
-        val logoR = 62f
+        val logoCy = 200f
+        val logoR = 60f
+        drawGlow(c, logoCx, logoCy, 112f, 0xFFD4AF37.toInt(), 40)
         try {
             val logoSrc = BitmapFactory.decodeResource(context.resources, com.eyeconlite.R.drawable.app_logo)
             if (logoSrc != null) {
@@ -68,48 +103,74 @@ object CardImageMaker {
                 c.drawBitmap(scaled, logoCx - logoR, logoCy - logoR, p)
                 c.restore()
                 p.style = Paint.Style.STROKE
-                p.strokeWidth = 4f
+                p.strokeWidth = 5f
+                p.color = 0xFFD4AF37.toInt()
+                c.drawCircle(logoCx, logoCy, logoR + 3f, p)
+                p.strokeWidth = 2f
                 p.color = 0xFFFFFFFF.toInt()
-                c.drawCircle(logoCx, logoCy, logoR + 2f, p)
+                p.alpha = 200
+                c.drawCircle(logoCx, logoCy, logoR + 10f, p)
+                p.alpha = 255
                 p.style = Paint.Style.FILL
             }
         } catch (_: Exception) { }
 
         p.textAlign = Paint.Align.LEFT
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        p.textSize = 58f
         p.color = 0xFFFFFFFF.toInt()
-        p.textSize = 56f
-        c.drawText("EYECON LITE", 235f, 200f, p)
+        val brand1 = "EYECON "
+        c.drawText(brand1, 232f, 196f, p)
+        p.color = 0xFFF5D67B.toInt()
+        c.drawText("LITE", 232f + p.measureText(brand1), 196f, p)
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        p.textSize = 30f
+        p.textSize = 27f
         p.color = 0xFF9FC6EE.toInt()
-        c.drawText("Finding Anyone", 238f, 242f, p)
+        c.drawText("F I N D I N G   A N Y O N E", 235f, 238f, p)
 
-        // data-source pill (top-right)
-        val pillLabel = "EYECON DATA"
+        // verified seal (dark pill, gold border + gold text)
+        val seal = "\u2605 VERIFIED"
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        p.textSize = 26f
-        val pillW = p.measureText(pillLabel) + 70f
-        val pillR = RectF(W - 60f - pillW, 160f, W - 60f, 224f)
-        p.color = 0xFF0B7B3E.toInt()
-        c.drawRoundRect(pillR, 32f, 32f, p)
-        p.color = 0xFFFFFFFF.toInt()
+        p.textSize = 25f
+        val sealW = p.measureText(seal) + 64f
+        val sealR = RectF(W - 60f - sealW, 158f, W - 60f, 220f)
+        p.color = 0xCC0A1628.toInt()
+        c.drawRoundRect(sealR, 31f, 31f, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 2.5f
+        p.color = 0xFFD4AF37.toInt()
+        c.drawRoundRect(sealR, 31f, 31f, p)
+        p.style = Paint.Style.FILL
+        p.color = 0xFFF5D67B.toInt()
         p.textAlign = Paint.Align.CENTER
-        c.drawText(pillLabel, pillR.centerX(), 203f, p)
+        c.drawText(seal, sealR.centerX(), 198f, p)
         p.textAlign = Paint.Align.LEFT
 
-        // --- hero photo card (full cover, rounded) ---
+        // --- premium hero: drop shadow + double gold frame + cover photo ---
         val cx = W / 2f
-        val hero = RectF(48f, 330f, (W - 48).toFloat(), 1160f)
-        val heroR = 46f
+        val hero = RectF(52f, 318f, (W - 52).toFloat(), 1148f)
+        val heroR = 44f
         val phone = info.phone
+        p.color = 0x99000000.toInt()
+        c.drawRoundRect(RectF(hero.left, hero.top + 24f, hero.right, hero.bottom + 24f), heroR, heroR, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 7f
+        p.color = 0xFFD4AF37.toInt()
+        c.drawRoundRect(RectF(hero.left - 7f, hero.top - 7f, hero.right + 7f, hero.bottom + 7f), heroR + 7f, heroR + 7f, p)
+        p.strokeWidth = 2f
+        p.color = 0xFFF5D67B.toInt()
+        p.alpha = 160
+        c.drawRoundRect(RectF(hero.left - 13f, hero.top - 13f, hero.right + 13f, hero.bottom + 13f), heroR + 13f, heroR + 13f, p)
+        p.alpha = 255
+        p.style = Paint.Style.FILL
         if (photo != null) {
             drawCover(c, photo, hero, heroR, p)
         } else {
             p.shader = LinearGradient(
                 0f, hero.top, 0f, hero.bottom,
-                intArrayOf(0xFF1B5FA8.toInt(), 0xFF0D3B6E.toInt()),
-                null, Shader.TileMode.CLAMP
+                intArrayOf(0xFF274E7D.toInt(), 0xFF10294D.toInt(), 0xFF0A1628.toInt()),
+                floatArrayOf(0f, 0.55f, 1f),
+                Shader.TileMode.CLAMP
             )
             val ph = Path()
             ph.addRoundRect(hero, heroR, heroR, Path.Direction.CW)
@@ -118,77 +179,133 @@ object CardImageMaker {
             c.drawRect(hero, p)
             c.restore()
             p.shader = null
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = 4f
+            p.color = 0xFFD4AF37.toInt()
+            p.alpha = 170
+            c.drawCircle(cx, hero.centerY() - 40f, 150f, p)
+            p.alpha = 255
+            p.style = Paint.Style.FILL
             p.color = 0xFFFFFFFF.toInt()
             p.textAlign = Paint.Align.CENTER
             p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            p.textSize = 300f
-            p.alpha = 235
+            p.textSize = 220f
             val initial = info.name.trim().firstOrNull()?.uppercase() ?: "?"
-            c.drawText(initial, cx, hero.centerY() + 100f, p)
-            p.alpha = 255
+            c.drawText(initial, cx, hero.centerY() + 35f, p)
             p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
-        // hero border
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = 3f
-        p.color = 0x55FFFFFF.toInt()
-        c.drawRoundRect(hero, heroR, heroR, p)
-        p.style = Paint.Style.FILL
-
-        // photo status badge (inside hero, top-right)
-        val badge = if (photo != null) "HD PHOTO" else "NO PHOTO"
-        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        p.textSize = 26f
-        val bw = p.measureText(badge) + 56f
-        val bRect = RectF(hero.right - bw - 28f, hero.top + 24f, hero.right - 28f, hero.top + 84f)
-        p.color = if (photo != null) 0xCC0B7B3E.toInt() else 0xAA5B6B82.toInt()
-        c.drawRoundRect(bRect, 30f, 30f, p)
+        // inner top highlight + gold corner ornaments
+        val hlPath = Path()
+        hlPath.addRoundRect(hero, heroR, heroR, Path.Direction.CW)
+        c.save()
+        c.clipPath(hlPath)
         p.color = 0xFFFFFFFF.toInt()
-        p.textAlign = Paint.Align.CENTER
-        c.drawText(badge, bRect.centerX(), bRect.top + 40f, p)
+        p.alpha = 50
+        c.drawRect(hero.left, hero.top, hero.right, hero.top + 5f, p)
+        p.alpha = 255
+        c.restore()
+        drawCorners(c, hero)
 
-        // bottom scrim for readable overlay text
-        val scrimTop = hero.bottom - 330f
+        // premium seal badge (gold when photo, dark when not)
+        val badge = if (photo != null) "\u2605 PREMIUM" else "NO PHOTO"
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        p.textSize = 25f
+        val bw = p.measureText(badge) + 64f
+        val bRect = RectF(hero.right - bw - 28f, hero.top + 24f, hero.right - 28f, hero.top + 86f)
+        if (photo != null) {
+            p.shader = LinearGradient(
+                0f, bRect.top, 0f, bRect.bottom,
+                intArrayOf(0xFFF5D67B.toInt(), 0xFFD4AF37.toInt()),
+                null, Shader.TileMode.CLAMP
+            )
+            c.drawRoundRect(bRect, 31f, 31f, p)
+            p.shader = null
+            p.color = 0xFF3A2E05.toInt()
+        } else {
+            p.color = 0xDD0A1628.toInt()
+            c.drawRoundRect(bRect, 31f, 31f, p)
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = 2f
+            p.color = 0xFFD4AF37.toInt()
+            c.drawRoundRect(bRect, 31f, 31f, p)
+            p.style = Paint.Style.FILL
+            p.color = 0xFFF5D67B.toInt()
+        }
+        p.textAlign = Paint.Align.CENTER
+        c.drawText(badge, bRect.centerX(), bRect.top + 41f, p)
+
+        // cinematic bottom scrim for readable overlay text
+        val scrimTop = hero.bottom - 360f
         val scPath = Path()
         scPath.addRoundRect(hero, heroR, heroR, Path.Direction.CW)
         c.save()
         c.clipPath(scPath)
         p.shader = LinearGradient(
             0f, scrimTop, 0f, hero.bottom,
-            intArrayOf(0x00000000, 0xD8000000.toInt()),
-            null, Shader.TileMode.CLAMP
+            intArrayOf(0x00000000, 0x99000000.toInt(), 0xE6000000.toInt()),
+            floatArrayOf(0f, 0.55f, 1f),
+            Shader.TileMode.CLAMP
         )
         c.drawRect(hero.left, scrimTop, hero.right, hero.bottom, p)
         c.restore()
         p.shader = null
 
-        // name + phone pill overlaid on photo (national format)
+        // name (shadowed) + gold rule + gold phone pill overlaid on photo
         val heroPhone = info.normalized?.nationalFormat ?: phone
+        val heroName = fitText(info.name.ifBlank { "Unknown" }, p.apply { textSize = 66f }, hero.width() - 120f)
         p.textAlign = Paint.Align.LEFT
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        p.textSize = 66f
+        p.color = 0x99000000.toInt()
+        c.drawText(heroName, hero.left + 60f, hero.bottom - 126f, p)
         p.color = 0xFFFFFFFF.toInt()
-        p.textSize = 64f
-        c.drawText(fitText(info.name.ifBlank { "Unknown" }, p, hero.width() - 120f), hero.left + 56f, hero.bottom - 130f, p)
+        c.drawText(heroName, hero.left + 56f, hero.bottom - 130f, p)
+        p.shader = LinearGradient(
+            hero.left + 56f, 0f, hero.left + 196f, 0f,
+            intArrayOf(0xFFF5D67B.toInt(), 0xFFD4AF37.toInt()),
+            null, Shader.TileMode.CLAMP
+        )
+        c.drawRoundRect(RectF(hero.left + 56f, hero.bottom - 112f, hero.left + 196f, hero.bottom - 104f), 4f, 4f, p)
+        p.shader = null
         p.textSize = 40f
-        val pillW2 = p.measureText(heroPhone) + 96f
-        val pillRect = RectF(hero.left + 56f, hero.bottom - 104f, hero.left + 56f + pillW2, hero.bottom - 36f)
-        p.color = 0xFF2196F3.toInt()
-        c.drawRoundRect(pillRect, 34f, 34f, p)
-        p.color = 0xFFFFFFFF.toInt()
+        val pillW2 = p.measureText(heroPhone) + 110f
+        val pillRect = RectF(hero.left + 56f, hero.bottom - 92f, hero.left + 56f + pillW2, hero.bottom - 28f)
+        p.shader = LinearGradient(
+            0f, pillRect.top, 0f, pillRect.bottom,
+            intArrayOf(0xFFF5D67B.toInt(), 0xFFD4AF37.toInt(), 0xFFB8912A.toInt()),
+            null, Shader.TileMode.CLAMP
+        )
+        c.drawRoundRect(pillRect, 32f, 32f, p)
+        p.shader = null
+        p.color = 0xFF3A2E05.toInt()
         p.textAlign = Paint.Align.CENTER
-        c.drawText(heroPhone, pillRect.centerX(), hero.bottom - 56f, p)
+        c.drawText(heroPhone, pillRect.centerX(), hero.bottom - 48f, p)
 
-        // --- info glass card ---
-        val card = RectF(48f, 1200f, (W - 48).toFloat(), 1720f)
-        p.color = 0xFFFFFFFF.toInt()
-        p.alpha = 20
-        c.drawRoundRect(card, 40f, 40f, p)
-        p.alpha = 255
+        // --- premium info card: dark luxe panel, gold top edge ---
+        val card = RectF(52f, 1188f, (W - 52).toFloat(), 1700f)
+        p.color = 0x99000000.toInt()
+        c.drawRoundRect(RectF(card.left, card.top + 16f, card.right, card.bottom + 16f), 38f, 38f, p)
+        p.color = 0xF20C1B30.toInt()
+        c.drawRoundRect(card, 38f, 38f, p)
         p.style = Paint.Style.STROKE
-        p.strokeWidth = 3f
-        p.color = 0x55FFFFFF.toInt()
-        c.drawRoundRect(card, 40f, 40f, p)
+        p.strokeWidth = 2.5f
+        p.color = 0xFFD4AF37.toInt()
+        p.alpha = 110
+        c.drawRoundRect(card, 38f, 38f, p)
+        p.alpha = 255
         p.style = Paint.Style.FILL
+        p.shader = LinearGradient(
+            card.left + 60f, 0f, card.right - 60f, 0f,
+            intArrayOf(0x009A7B1E, 0xFFD4AF37.toInt(), 0x009A7B1E),
+            null, Shader.TileMode.CLAMP
+        )
+        val goldTop = Path()
+        goldTop.addRoundRect(card, 38f, 38f, Path.Direction.CW)
+        c.save()
+        c.clipPath(goldTop)
+        c.drawRect(card.left, card.top, card.right, card.top + 4f, p)
+        c.restore()
+        p.shader = null
 
         val date = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date(info.checkedAt))
         val nn = info.normalized
@@ -205,57 +322,69 @@ object CardImageMaker {
             "Checked" to date
         )
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF8FB4D8.toInt()
-            textSize = 26f
+            color = 0xFFD4AF37.toInt()
+            textSize = 25f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xFFFFFFFF.toInt()
-            textSize = 36f
+            textSize = 35f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
-        var y = 1276f
+        var y = 1270f
         for ((label, value) in rows) {
             val lab = label.uppercase() + "   "
-            c.drawText(lab, 110f, y, labelPaint)
+            c.drawText(lab, 112f, y, labelPaint)
             val lw = labelPaint.measureText(lab)
-            val maxW = card.right - 70f - (110f + lw)
-            c.drawText(fitText(value, valuePaint, maxW), 110f + lw, y + 4f, valuePaint)
+            val maxW = card.right - 70f - (112f + lw)
+            c.drawText(fitText(value, valuePaint, maxW), 112f + lw, y + 4f, valuePaint)
             if (label != "Checked") {
-                y += 78f
-                p.color = 0x22FFFFFF.toInt()
-                c.drawRect(100f, y - 30f, card.right - 60f, y - 28f, p)
+                y += 84f
+                p.color = 0xFFD4AF37.toInt()
+                p.alpha = 36
+                c.drawRect(104f, y - 32f, card.right - 64f, y - 30f, p)
+                p.alpha = 255
             }
         }
 
-        // --- footer logo + text ---
+        // --- premium footer: gold divider + diamond, ringed logo, credits ---
+        p.color = 0xFFD4AF37.toInt()
+        p.alpha = 140
+        c.drawRect(120f, 1750f, W - 120f, 1752.5f, p)
+        p.alpha = 255
+        p.color = 0xFFF5D67B.toInt()
+        c.save()
+        c.rotate(45f, cx, 1751f)
+        c.drawRect(cx - 9f, 1751f - 9f, cx + 9f, 1751f + 9f, p)
+        c.restore()
         try {
             val fSrc = BitmapFactory.decodeResource(context.resources, com.eyeconlite.R.drawable.app_logo)
             if (fSrc != null) {
-                val fr = 30f
+                val fr = 24f
                 val fSize = (fr * 2).toInt()
                 val fScaled = Bitmap.createScaledBitmap(fSrc, fSize, fSize, true)
                 val fpath = Path()
-                fpath.addCircle(cx, H - 165f, fr, Path.Direction.CW)
+                fpath.addCircle(cx, 1798f, fr, Path.Direction.CW)
                 c.save()
                 c.clipPath(fpath)
-                c.drawBitmap(fScaled, cx - fr, H - 165f - fr, p)
+                c.drawBitmap(fScaled, cx - fr, 1798f - fr, p)
                 c.restore()
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = 3f
+                p.color = 0xFFD4AF37.toInt()
+                c.drawCircle(cx, 1798f, fr + 2f, p)
+                p.style = Paint.Style.FILL
             }
         } catch (_: Exception) { }
         p.textAlign = Paint.Align.CENTER
-        p.color = 0xFF7FA8CC.toInt()
-        p.textSize = 28f
-        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        c.drawText("Generated by Eyecon Lite  •  Finding Anyone", cx, H - 145f, p)
         p.color = 0xFFFFFFFF.toInt()
-        p.textSize = 30f
+        p.textSize = 27f
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        c.drawText("Developed by JUBAIR HOSEN", cx, H - 100f, p)
-        p.color = 0xFF2196F3.toInt()
-        p.textSize = 28f
+        c.drawText("Developed by JUBAIR HOSEN", cx, 1852f, p)
+        p.color = 0xFFD4AF37.toInt()
+        p.textSize = 23f
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        c.drawText("eyecon lite", cx, H - 60f, p)
+        c.drawText("EYECON LITE  \u2022  FINDING ANYONE", cx, 1882f, p)
 
         return bmp
     }
@@ -273,6 +402,38 @@ object CardImageMaker {
         val src = Rect(sx.toInt(), sy.toInt(), (sx + sw).toInt(), (sy + sh).toInt())
         c.drawBitmap(photo, src, dst, p)
         c.restore()
+    }
+
+    private fun drawGlow(c: Canvas, cx: Float, cy: Float, radius: Float, color: Int, alpha: Int) {
+        val glow = Paint(Paint.ANTI_ALIAS_FLAG)
+        glow.shader = RadialGradient(
+            cx, cy, radius,
+            intArrayOf(setAlpha(color, alpha), 0x00000000),
+            null, Shader.TileMode.CLAMP
+        )
+        c.drawCircle(cx, cy, radius, glow)
+    }
+
+    private fun setAlpha(color: Int, alpha: Int): Int {
+        return (color and 0x00FFFFFF) or ((alpha and 0xFF) shl 24)
+    }
+
+    private fun drawCorners(c: Canvas, r: RectF) {
+        val len = 72f
+        val inset = 26f
+        val cp = Paint(Paint.ANTI_ALIAS_FLAG)
+        cp.style = Paint.Style.STROKE
+        cp.strokeWidth = 8f
+        cp.color = 0xFFF5D67B.toInt()
+        cp.strokeCap = Paint.Cap.ROUND
+        c.drawLine(r.left + inset, r.top + inset + len, r.left + inset, r.top + inset, cp)
+        c.drawLine(r.left + inset, r.top + inset, r.left + inset + len, r.top + inset, cp)
+        c.drawLine(r.right - inset - len, r.top + inset, r.right - inset, r.top + inset, cp)
+        c.drawLine(r.right - inset, r.top + inset, r.right - inset, r.top + inset + len, cp)
+        c.drawLine(r.left + inset, r.bottom - inset - len, r.left + inset, r.bottom - inset, cp)
+        c.drawLine(r.left + inset, r.bottom - inset, r.left + inset + len, r.bottom - inset, cp)
+        c.drawLine(r.right - inset - len, r.bottom - inset, r.right - inset, r.bottom - inset, cp)
+        c.drawLine(r.right - inset, r.bottom - inset - len, r.right - inset, r.bottom - inset, cp)
     }
 
     private fun fitText(text: String, paint: Paint, maxW: Float): String {
