@@ -162,20 +162,21 @@ object CardImageMaker {
         c.restore()
         p.shader = null
 
-        // name + phone pill overlaid on photo
+        // name + phone pill overlaid on photo (national format)
+        val heroPhone = info.normalized?.nationalFormat ?: phone
         p.textAlign = Paint.Align.LEFT
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         p.color = 0xFFFFFFFF.toInt()
         p.textSize = 64f
         c.drawText(fitText(info.name.ifBlank { "Unknown" }, p, hero.width() - 120f), hero.left + 56f, hero.bottom - 130f, p)
         p.textSize = 40f
-        val pillW2 = p.measureText(phone) + 96f
+        val pillW2 = p.measureText(heroPhone) + 96f
         val pillRect = RectF(hero.left + 56f, hero.bottom - 104f, hero.left + 56f + pillW2, hero.bottom - 36f)
         p.color = 0xFF2196F3.toInt()
         c.drawRoundRect(pillRect, 34f, 34f, p)
         p.color = 0xFFFFFFFF.toInt()
         p.textAlign = Paint.Align.CENTER
-        c.drawText(phone, pillRect.centerX(), hero.bottom - 56f, p)
+        c.drawText(heroPhone, pillRect.centerX(), hero.bottom - 56f, p)
 
         // --- info glass card ---
         val card = RectF(48f, 1200f, (W - 48).toFloat(), 1720f)
@@ -191,16 +192,16 @@ object CardImageMaker {
 
         val date = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date(info.checkedAt))
         val nn = info.normalized
+        val nationalPhone = nn?.nationalFormat ?: phone
         val opLine = listOfNotNull(
-            nn?.operator?.takeIf { it != "—" },
-            nn?.numberType?.takeIf { it != "—" && it != "Unknown" }
-        ).joinToString(" • ").ifBlank { "—" }
+            nn?.operator?.takeIf { it != "Unknown" && it.isNotBlank() },
+            nn?.numberType?.takeIf { it != "Unknown" && it.isNotBlank() }
+        ).joinToString(" • ").ifBlank { "Unknown" }
         val rows = listOf(
-            "Country" to (if (nn != null) "${nn.countryName} (+${nn.countryCode})" else "—"),
+            "Country" to (if (nn != null) "${nn.countryName} (+${nn.countryCode})" else "Unknown"),
             "Operator" to opLine,
-            "National" to (nn?.nationalFormat ?: phone),
-            "Intl" to (nn?.prettyInternational ?: phone),
-            "Tag" to info.tag.ifBlank { "—" },
+            "Number" to nationalPhone,
+            "Tag" to info.tag.ifBlank { "No tag" },
             "Checked" to date
         )
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

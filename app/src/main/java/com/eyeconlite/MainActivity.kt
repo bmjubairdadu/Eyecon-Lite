@@ -563,19 +563,18 @@ fun ResultCard(
             }
 
             Spacer(Modifier.height(14.dp))
-            // info rows
+            // info rows (national number only, no international row)
             val n = info.normalized
             DetailRow("Name", info.name.ifBlank { "Unknown" }, Icons.Filled.Person)
-            DetailRow("International", n?.prettyInternational ?: info.phone, Icons.Filled.Phone)
-            DetailRow("National", n?.nationalFormat ?: "—", Icons.Filled.Call)
+            DetailRow("Number", n?.nationalFormat ?: info.phone, Icons.Filled.Call)
             DetailRow(
                 "Country",
-                if (n != null) "${n.countryFlag} ${n.countryName} (+${n.countryCode})" else "—",
+                if (n != null) "${n.countryFlag} ${n.countryName} (+${n.countryCode})" else "Unknown",
                 Icons.Filled.LocationOn
             )
-            DetailRow("Operator", n?.operator ?: "—", Icons.Filled.SimCard)
-            DetailRow("Type", n?.numberType ?: "—", Icons.Filled.Info)
-            DetailRow("Tag", info.tag.ifBlank { "—" }, Icons.Filled.Badge)
+            DetailRow("Operator", n?.operator ?: "Unknown", Icons.Filled.SimCard)
+            DetailRow("Type", n?.numberType ?: "Unknown", Icons.Filled.Info)
+            DetailRow("Tag", info.tag.ifBlank { "No tag" }, Icons.Filled.Badge)
             DetailRow("Photo", info.photoStatus, Icons.Filled.Image)
             DetailRow("Source", "Eyecon", Icons.Filled.Public)
             DetailRow(

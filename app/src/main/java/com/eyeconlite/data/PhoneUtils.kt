@@ -137,28 +137,40 @@ object PhoneUtils {
 
     private fun detectOperator(cc: String, national: String): String {
         if (cc == "880") {
-            val p3 = national.take(3)
+            // national here is WITHOUT country code: "1712345678" (10 digit)
+            // local form is "01712345678" -> prefix 013/017/014/019/015/016/018
+            val local = when {
+                national.length == 10 && national.startsWith("1") -> "0$national"
+                national.length == 11 && national.startsWith("01") -> national
+                else -> national
+            }
+            val p3 = local.take(3)
             return when (p3) {
                 "013", "017" -> "Grameenphone"
                 "014", "019" -> "Banglalink"
                 "015" -> "Teletalk"
                 "016", "018" -> "Robi / Airtel"
-                else -> if (national.startsWith("01")) "Bangladesh Mobile" else "Unknown"
+                else -> if (local.startsWith("01")) "Bangladesh Mobile" else "Unknown"
             }
         }
         if (cc == "91" && national.length == 10) return "India Mobile"
         if (cc == "1" && national.length == 10) return "NANP Carrier"
-        return "—"
+        return "Unknown"
     }
 
     private fun detectType(cc: String, national: String): String {
         if (cc == "880") {
-            return if (national.startsWith("01") && national.length == 10) "Mobile"
+            val local = when {
+                national.length == 10 && national.startsWith("1") -> "0$national"
+                else -> national
+            }
+            return if (local.startsWith("01") && local.length == 11) "Mobile"
+            else if (local.startsWith("02") || local.length <= 8) "Landline"
             else "Unknown"
         }
         return when {
-            national.length >= 10 -> "Mobile / Unknown"
-            national.length <= 8 -> "Landline?"
+            national.length >= 10 -> "Mobile"
+            national.length <= 8 -> "Landline"
             else -> "Unknown"
         }
     }
