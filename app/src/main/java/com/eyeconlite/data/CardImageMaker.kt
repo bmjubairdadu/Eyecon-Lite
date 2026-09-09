@@ -3,6 +3,7 @@ package com.eyeconlite.data
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -49,20 +50,42 @@ object CardImageMaker {
         p.color = 0xFF2196F3.toInt()
         c.drawRoundRect(RectF(60f, 60f, (W - 60).toFloat(), 76f), 8f, 8f, p)
 
+        // --- app logo (call.png, circular, centered) ---
+        val headerCx = W / 2f
+        try {
+            val logoSrc = BitmapFactory.decodeResource(context.resources, com.eyeconlite.R.drawable.app_logo)
+            if (logoSrc != null) {
+                val lr = 68f
+                val lSize = (lr * 2).toInt()
+                val scaled = Bitmap.createScaledBitmap(logoSrc, lSize, lSize, true)
+                val lpath = Path()
+                lpath.addCircle(headerCx, 160f, lr, Path.Direction.CW)
+                c.save()
+                c.clipPath(lpath)
+                c.drawBitmap(scaled, headerCx - lr, 160f - lr, p)
+                c.restore()
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = 4f
+                p.color = 0xFFFFFFFF.toInt()
+                c.drawCircle(headerCx, 160f, lr + 2f, p)
+                p.style = Paint.Style.FILL
+            }
+        } catch (_: Exception) { }
+
         // --- branding ---
         p.color = 0xFFFFFFFF.toInt()
         p.textAlign = Paint.Align.CENTER
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         p.textSize = 54f
-        c.drawText("EYECON  LITE", W / 2f, 160f, p)
+        c.drawText("EYECON  LITE", W / 2f, 268f, p)
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         p.textSize = 32f
         p.color = 0xFF9FC6EE.toInt()
-        c.drawText("Finding  Anyone", W / 2f, 208f, p)
+        c.drawText("Finding  Anyone", W / 2f, 310f, p)
 
         // --- glass card ---
-        val cardTop = 270f
-        val cardBottom = 1640f
+        val cardTop = 350f
+        val cardBottom = 1660f
         p.color = 0xFFFFFFFF.toInt()
         p.alpha = 22
         c.drawRoundRect(RectF(70f, cardTop, (W - 70).toFloat(), cardBottom), 48f, 48f, p)
@@ -76,8 +99,8 @@ object CardImageMaker {
 
         // --- photo circle ---
         val cx = W / 2f
-        val cy = cardTop + 300f
-        val r = 215f
+        val cy = cardTop + 240f
+        val r = 180f
         // ring
         p.color = 0xFF2196F3.toInt()
         c.drawCircle(cx, cy, r + 14f, p)
@@ -96,38 +119,38 @@ object CardImageMaker {
             p.color = 0xFF1B3A5F.toInt()
             c.drawCircle(cx, cy, r, p)
             p.color = 0xFFFFFFFF.toInt()
-            p.textSize = 200f
+            p.textSize = 160f
             p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             val initial = info.name.trim().firstOrNull()?.uppercase() ?: "?"
-            c.drawText(initial, cx, cy + 70f, p)
+            c.drawText(initial, cx, cy + 55f, p)
             p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
 
         // --- name ---
-        var y = cy + r + 110f
+        var y = cy + r + 80f
         p.color = 0xFFFFFFFF.toInt()
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        p.textSize = 68f
+        p.textSize = 60f
         c.drawText(fitText(info.name.ifBlank { "Unknown" }, p, 880f), cx, y, p)
 
         // --- phone pill ---
-        y += 92f
+        y += 78f
         val phone = info.phone
-        p.textSize = 46f
+        p.textSize = 42f
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        val pillW = p.measureText(phone) + 120f
+        val pillW = p.measureText(phone) + 110f
         p.color = 0xFF2196F3.toInt()
-        c.drawRoundRect(RectF(cx - pillW / 2, y - 62f, cx + pillW / 2, y + 22f), 44f, 44f, p)
+        c.drawRoundRect(RectF(cx - pillW / 2, y - 58f, cx + pillW / 2, y + 20f), 40f, 40f, p)
         p.color = 0xFFFFFFFF.toInt()
         c.drawText(phone, cx, y, p)
 
         // --- divider ---
-        y += 70f
+        y += 52f
         p.color = 0x33FFFFFF.toInt()
         c.drawRect(150f, y, (W - 150).toFloat(), y + 2f, p)
 
         // --- detail rows ---
-        y += 40f
+        y += 28f
         p.textAlign = Paint.Align.LEFT
         val date = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date())
         val rows = listOf(
@@ -138,28 +161,43 @@ object CardImageMaker {
             "Checked" to date
         )
         for ((label, value) in rows) {
-            y += 92f
+            y += 70f
             p.color = 0xFF8FB4D8.toInt()
-            p.textSize = 30f
+            p.textSize = 28f
             p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             c.drawText(label.uppercase(), 150f, y, p)
-            y += 52f
+            y += 46f
             p.color = 0xFFFFFFFF.toInt()
-            p.textSize = 44f
+            p.textSize = 40f
             p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             c.drawText(fitText(value, p, 780f), 150f, y, p)
-            y += 18f
+            y += 10f
         }
 
-        // --- footer ---
+        // --- footer logo + text ---
+        try {
+            val fSrc = BitmapFactory.decodeResource(context.resources, com.eyeconlite.R.drawable.app_logo)
+            if (fSrc != null) {
+                val fr = 30f
+                val fSize = (fr * 2).toInt()
+                val fScaled = Bitmap.createScaledBitmap(fSrc, fSize, fSize, true)
+                val fpath = Path()
+                fpath.addCircle(cx, H - 165f, fr, Path.Direction.CW)
+                c.save()
+                c.clipPath(fpath)
+                c.drawBitmap(fScaled, cx - fr, H - 165f - fr, p)
+                c.restore()
+            }
+        } catch (_: Exception) { }
         p.textAlign = Paint.Align.CENTER
         p.color = 0xFF7FA8CC.toInt()
-        p.textSize = 30f
-        c.drawText("Generated by Eyecon Lite  •  Finding Anyone", cx, H - 150f, p)
+        p.textSize = 28f
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        c.drawText("Generated by Eyecon Lite  •  Finding Anyone", cx, H - 105f, p)
         p.color = 0xFF2196F3.toInt()
-        p.textSize = 30f
+        p.textSize = 28f
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        c.drawText("eyecon lite", cx, H - 100f, p)
+        c.drawText("eyecon lite", cx, H - 65f, p)
 
         return bmp
     }
