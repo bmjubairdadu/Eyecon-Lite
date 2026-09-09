@@ -56,6 +56,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -408,19 +409,31 @@ fun SearchScreen() {
                 ) {
                     Icon(Icons.Filled.History, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
                     Text("Recent:", color = Color.Gray, fontSize = 12.sp)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { history = emptyList() }) {
+                        Text("Clear all", color = Color(0xFFFF8A80), fontSize = 12.sp)
+                    }
                 }
                 Spacer(Modifier.height(6.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     history.forEach { h ->
-                        Button(
-                            onClick = { query = h; doSearch(h) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White.copy(alpha = 0.07f)
-                            ),
-                            shape = RoundedCornerShape(10.dp),
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(h, color = Color(0xFFBFE0FF), fontSize = 13.sp)
+                            Button(
+                                onClick = { query = h; doSearch(h) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White.copy(alpha = 0.07f)
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(h, color = Color(0xFFBFE0FF), fontSize = 13.sp)
+                            }
+                            IconButton(onClick = { history = history.filter { it != h } }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Delete", tint = Color.Gray)
+                            }
                         }
                     }
                 }

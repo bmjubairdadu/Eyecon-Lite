@@ -1,4 +1,4 @@
-package com.eyeconlite.data
+﻿package com.eyeconlite.data
 
 import android.content.Context
 import android.content.Intent
@@ -52,9 +52,9 @@ object AppUpdater {
             .build()
         client.newCall(req).execute().use { resp ->
             if (resp.code == 403) {
-                throw UpdateCheckException("GitHub update check is temporarily rate-limited")
+                throw UpdateCheckException("Update check unavailable")
             }
-            if (!resp.isSuccessful) throw UpdateCheckException("Update check failed (${resp.code})")
+            if (!resp.isSuccessful) throw UpdateCheckException("Check failed (${resp.code})")
             val json = JSONObject(resp.body?.string().orEmpty())
             val tag = json.optString("tag_name", "").trim()
             if (tag.isEmpty()) throw IllegalStateException("No release found")
@@ -187,3 +187,4 @@ object AppUpdater {
         context.startActivity(intent)
     }
 }
+

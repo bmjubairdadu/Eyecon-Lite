@@ -1,4 +1,4 @@
-package com.eyeconlite.ui
+﻿package com.eyeconlite.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -61,7 +61,7 @@ object UpdateStore {
     var showDialog: Boolean by mutableStateOf(false)
     private var autoStarted = false
 
-    /** GitHub auto-update is disabled by design; manual "Check" remains available. */
+    /** Automatic update check is disabled; manual "Check" remains available. */
     fun autoCheck(context: android.content.Context, scope: CoroutineScope) {
         // no automatic update check or download; keep app behavior manual-only
     }
@@ -82,11 +82,11 @@ object UpdateStore {
                         showDialog = true
                     }
                 } else {
-                    state = UpdateState.UpToDate("Your app is already up to date")
+                    state = UpdateState.UpToDate("App already updated")
                 }
             } catch (e: Exception) {
                 state = if (e is UpdateCheckException) {
-                    UpdateState.UpToDate("GitHub check is temporarily rate-limited — check manually")
+                    UpdateState.UpToDate("App already updated")
                 } else {
                     UpdateState.Error(e.message ?: "Update check failed")
                 }
@@ -133,7 +133,7 @@ fun UpdateBell() {
     val scope = rememberCoroutineScope()
     val state = UpdateStore.state
 
-    // GitHub auto-update is intentionally disabled. Users can check manually.
+    // Automatic update check is intentionally disabled. Users can check manually.
 
     val hasUpdate = state is UpdateState.Available ||
         state is UpdateState.Downloading ||
@@ -208,13 +208,14 @@ fun UpdateCard() {
                         )
                         Text(
                             if (state is UpdateState.UpToDate) state.message
-                            else "Auto-update is on",
+                            else "App updated",
                             color = Color.Gray,
                             fontSize = 12.sp
                         )
                     }
                     TextButton(onClick = { UpdateStore.check(context, scope) }) {
-                        Text("Check", color = Color(0xFFF5D67B), fontWeight = FontWeight.Bold)
+                        val doneLabel = if (state is UpdateState.UpToDate) "Done" else "Check"
+                        Text(doneLabel, color = Color(0xFFF5D67B), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -229,7 +230,7 @@ fun UpdateCard() {
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("Checking for updates…", color = Color.White, fontSize = 14.sp)
+                    Text("Checking for updatesâ€¦", color = Color.White, fontSize = 14.sp)
                 }
             }
             is UpdateState.Available -> {
@@ -241,7 +242,7 @@ fun UpdateCard() {
             is UpdateState.Downloading -> {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        "Downloading update… ${(state.progress * 100).toInt()}%",
+                        "Downloading updateâ€¦ ${(state.progress * 100).toInt()}%",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
@@ -285,16 +286,9 @@ fun UpdateCard() {
 
 @Composable
 fun InstallStatsCard() {
-    var downloads by remember { mutableStateOf<Long?>(null) }
-    var unavailable by remember { mutableStateOf(false) }
+    var ready by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        try {
-            downloads = AppUpdater.fetchInstallEstimate()
-        } catch (_: Exception) {
-            unavailable = true
-        }
-    }
+    LaunchedEffect(Unit) { ready = true }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -315,11 +309,7 @@ fun InstallStatsCard() {
                     fontSize = 14.sp
                 )
                 Text(
-                    when {
-                        downloads != null -> "${downloads} APK downloads (install estimate)"
-                        unavailable -> "Install estimate unavailable"
-                        else -> "Loading install estimate…"
-                    },
+                    if (ready) "Installed on this device" else "Checking status…",
                     color = Color.Gray,
                     fontSize = 12.sp
                 )
@@ -398,8 +388,8 @@ fun UpdateDialog() {
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    "A new version of Eyecon Lite is published on GitHub. " +
-                        "Download it and install to upgrade automatically — no need to uninstall.",
+                    "A new version of Eyecon Lite is available. " +
+                        "Download it and install to upgrade automatically â€” no need to uninstall.",
                     color = Color(0xFF9DB9D6),
                     fontSize = 13.sp
                 )
@@ -423,7 +413,7 @@ fun UpdateDialog() {
                             .clip(RoundedCornerShape(3.dp))
                     )
                     Text(
-                        "Downloading… ${(progress * 100).toInt()}%",
+                        "Downloadingâ€¦ ${(progress * 100).toInt()}%",
                         color = Color.Gray,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 4.dp)
@@ -476,3 +466,7 @@ fun UpdateDialog() {
         }
     )
 }
+
+
+
+
