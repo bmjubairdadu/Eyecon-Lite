@@ -23,6 +23,10 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 APK: `app/build/outputs/apk/debug/app-debug.apk`
 Prebuilt APK is attached to the GitHub release.
 
+## Author
+
+Developed by **JUBAIR HOSEN**.
+
 ## Project structure
 
 - `app/src/main/java/com/eyeconlite/MainActivity.kt` — splash + search + result UI

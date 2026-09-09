@@ -440,10 +440,18 @@ fun SearchScreen() {
 
             Spacer(Modifier.height(30.dp))
             Text(
-                "Data source: Eyecon • Portrait PNG saves to Downloads",
+                "Developed by JUBAIR HOSEN",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                "Portrait PNG saves to Downloads",
                 color = Color.Gray,
                 fontSize = 11.sp,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }
