@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -50,118 +51,156 @@ object CardImageMaker {
         p.color = 0xFF2196F3.toInt()
         c.drawRoundRect(RectF(60f, 60f, (W - 60).toFloat(), 76f), 8f, 8f, p)
 
-        // --- app logo (call.png, circular, centered) ---
+        // --- header: app logo + brand (left), data pill (right) ---
         val headerCx = W / 2f
+        val logoCx = 150f
+        val logoCy = 205f
+        val logoR = 62f
         try {
             val logoSrc = BitmapFactory.decodeResource(context.resources, com.eyeconlite.R.drawable.app_logo)
             if (logoSrc != null) {
-                val lr = 68f
-                val lSize = (lr * 2).toInt()
+                val lSize = (logoR * 2).toInt()
                 val scaled = Bitmap.createScaledBitmap(logoSrc, lSize, lSize, true)
                 val lpath = Path()
-                lpath.addCircle(headerCx, 160f, lr, Path.Direction.CW)
+                lpath.addCircle(logoCx, logoCy, logoR, Path.Direction.CW)
                 c.save()
                 c.clipPath(lpath)
-                c.drawBitmap(scaled, headerCx - lr, 160f - lr, p)
+                c.drawBitmap(scaled, logoCx - logoR, logoCy - logoR, p)
                 c.restore()
                 p.style = Paint.Style.STROKE
                 p.strokeWidth = 4f
                 p.color = 0xFFFFFFFF.toInt()
-                c.drawCircle(headerCx, 160f, lr + 2f, p)
+                c.drawCircle(logoCx, logoCy, logoR + 2f, p)
                 p.style = Paint.Style.FILL
             }
         } catch (_: Exception) { }
 
-        // --- branding ---
+        p.textAlign = Paint.Align.LEFT
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        p.color = 0xFFFFFFFF.toInt()
+        p.textSize = 56f
+        c.drawText("EYECON LITE", 235f, 200f, p)
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        p.textSize = 30f
+        p.color = 0xFF9FC6EE.toInt()
+        c.drawText("Finding Anyone", 238f, 242f, p)
+
+        // data-source pill (top-right)
+        val pillLabel = "EYECON DATA"
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        p.textSize = 26f
+        val pillW = p.measureText(pillLabel) + 70f
+        val pillR = RectF(W - 60f - pillW, 160f, W - 60f, 224f)
+        p.color = 0xFF0B7B3E.toInt()
+        c.drawRoundRect(pillR, 32f, 32f, p)
         p.color = 0xFFFFFFFF.toInt()
         p.textAlign = Paint.Align.CENTER
-        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        p.textSize = 54f
-        c.drawText("EYECON  LITE", W / 2f, 268f, p)
-        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        p.textSize = 32f
-        p.color = 0xFF9FC6EE.toInt()
-        c.drawText("Finding  Anyone", W / 2f, 310f, p)
+        c.drawText(pillLabel, pillR.centerX(), 203f, p)
+        p.textAlign = Paint.Align.LEFT
 
-        // --- glass card ---
-        val cardTop = 350f
-        val cardBottom = 1660f
-        p.color = 0xFFFFFFFF.toInt()
-        p.alpha = 22
-        c.drawRoundRect(RectF(70f, cardTop, (W - 70).toFloat(), cardBottom), 48f, 48f, p)
-        p.alpha = 255
-        // card border
+        // --- hero photo card (full cover, rounded) ---
+        val cx = W / 2f
+        val hero = RectF(48f, 330f, (W - 48).toFloat(), 1160f)
+        val heroR = 46f
+        val phone = info.phone
+        if (photo != null) {
+            drawCover(c, photo, hero, heroR, p)
+        } else {
+            p.shader = LinearGradient(
+                0f, hero.top, 0f, hero.bottom,
+                intArrayOf(0xFF1B5FA8.toInt(), 0xFF0D3B6E.toInt()),
+                null, Shader.TileMode.CLAMP
+            )
+            val ph = Path()
+            ph.addRoundRect(hero, heroR, heroR, Path.Direction.CW)
+            c.save()
+            c.clipPath(ph)
+            c.drawRect(hero, p)
+            c.restore()
+            p.shader = null
+            p.color = 0xFFFFFFFF.toInt()
+            p.textAlign = Paint.Align.CENTER
+            p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            p.textSize = 300f
+            p.alpha = 235
+            val initial = info.name.trim().firstOrNull()?.uppercase() ?: "?"
+            c.drawText(initial, cx, hero.centerY() + 100f, p)
+            p.alpha = 255
+            p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+        // hero border
         p.style = Paint.Style.STROKE
         p.strokeWidth = 3f
         p.color = 0x55FFFFFF.toInt()
-        c.drawRoundRect(RectF(70f, cardTop, (W - 70).toFloat(), cardBottom), 48f, 48f, p)
+        c.drawRoundRect(hero, heroR, heroR, p)
         p.style = Paint.Style.FILL
 
-        // --- photo circle ---
-        val cx = W / 2f
-        val cy = cardTop + 240f
-        val r = 180f
-        // ring
-        p.color = 0xFF2196F3.toInt()
-        c.drawCircle(cx, cy, r + 14f, p)
-        p.color = 0xFFFFFFFF.toInt()
-        c.drawCircle(cx, cy, r + 6f, p)
-
-        if (photo != null) {
-            val path = Path()
-            path.addCircle(cx, cy, r, Path.Direction.CW)
-            c.save()
-            c.clipPath(path)
-            val scaled = Bitmap.createScaledBitmap(photo, (r * 2).toInt(), (r * 2).toInt(), true)
-            c.drawBitmap(scaled, cx - r, cy - r, p)
-            c.restore()
-        } else {
-            p.color = 0xFF1B3A5F.toInt()
-            c.drawCircle(cx, cy, r, p)
-            p.color = 0xFFFFFFFF.toInt()
-            p.textSize = 160f
-            p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            val initial = info.name.trim().firstOrNull()?.uppercase() ?: "?"
-            c.drawText(initial, cx, cy + 55f, p)
-            p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        }
-
-        // --- name ---
-        var y = cy + r + 80f
-        p.color = 0xFFFFFFFF.toInt()
+        // photo status badge (inside hero, top-right)
+        val badge = if (photo != null) "HD PHOTO" else "NO PHOTO"
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        p.textSize = 60f
-        c.drawText(fitText(info.name.ifBlank { "Unknown" }, p, 880f), cx, y, p)
-
-        // --- phone pill ---
-        y += 78f
-        val phone = info.phone
-        p.textSize = 42f
-        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        val pillW = p.measureText(phone) + 110f
-        p.color = 0xFF2196F3.toInt()
-        c.drawRoundRect(RectF(cx - pillW / 2, y - 58f, cx + pillW / 2, y + 20f), 40f, 40f, p)
+        p.textSize = 26f
+        val bw = p.measureText(badge) + 56f
+        val bRect = RectF(hero.right - bw - 28f, hero.top + 24f, hero.right - 28f, hero.top + 84f)
+        p.color = if (photo != null) 0xCC0B7B3E.toInt() else 0xAA5B6B82.toInt()
+        c.drawRoundRect(bRect, 30f, 30f, p)
         p.color = 0xFFFFFFFF.toInt()
-        c.drawText(phone, cx, y, p)
+        p.textAlign = Paint.Align.CENTER
+        c.drawText(badge, bRect.centerX(), bRect.top + 40f, p)
 
-        // --- divider ---
-        y += 52f
-        p.color = 0x33FFFFFF.toInt()
-        c.drawRect(150f, y, (W - 150).toFloat(), y + 2f, p)
+        // bottom scrim for readable overlay text
+        val scrimTop = hero.bottom - 330f
+        val scPath = Path()
+        scPath.addRoundRect(hero, heroR, heroR, Path.Direction.CW)
+        c.save()
+        c.clipPath(scPath)
+        p.shader = LinearGradient(
+            0f, scrimTop, 0f, hero.bottom,
+            intArrayOf(0x00000000, 0xD8000000.toInt()),
+            null, Shader.TileMode.CLAMP
+        )
+        c.drawRect(hero.left, scrimTop, hero.right, hero.bottom, p)
+        c.restore()
+        p.shader = null
 
-        // --- detail rows (single-line, compact) ---
-        y += 22f
+        // name + phone pill overlaid on photo
         p.textAlign = Paint.Align.LEFT
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        p.color = 0xFFFFFFFF.toInt()
+        p.textSize = 64f
+        c.drawText(fitText(info.name.ifBlank { "Unknown" }, p, hero.width() - 120f), hero.left + 56f, hero.bottom - 130f, p)
+        p.textSize = 40f
+        val pillW2 = p.measureText(phone) + 96f
+        val pillRect = RectF(hero.left + 56f, hero.bottom - 104f, hero.left + 56f + pillW2, hero.bottom - 36f)
+        p.color = 0xFF2196F3.toInt()
+        c.drawRoundRect(pillRect, 34f, 34f, p)
+        p.color = 0xFFFFFFFF.toInt()
+        p.textAlign = Paint.Align.CENTER
+        c.drawText(phone, pillRect.centerX(), hero.bottom - 56f, p)
+
+        // --- info glass card ---
+        val card = RectF(48f, 1200f, (W - 48).toFloat(), 1720f)
+        p.color = 0xFFFFFFFF.toInt()
+        p.alpha = 20
+        c.drawRoundRect(card, 40f, 40f, p)
+        p.alpha = 255
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 3f
+        p.color = 0x55FFFFFF.toInt()
+        c.drawRoundRect(card, 40f, 40f, p)
+        p.style = Paint.Style.FILL
+
         val date = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date(info.checkedAt))
         val nn = info.normalized
+        val opLine = listOfNotNull(
+            nn?.operator?.takeIf { it != "—" },
+            nn?.numberType?.takeIf { it != "—" && it != "Unknown" }
+        ).joinToString(" • ").ifBlank { "—" }
         val rows = listOf(
-            "Country" to if (nn != null) "${nn.countryFlag} ${nn.countryName} (+${nn.countryCode})" else "—",
-            "Operator" to (nn?.operator ?: "—"),
-            "Type" to (nn?.numberType ?: "—"),
+            "Country" to (if (nn != null) "${nn.countryName} (+${nn.countryCode})" else "—"),
+            "Operator" to opLine,
             "National" to (nn?.nationalFormat ?: phone),
             "Intl" to (nn?.prettyInternational ?: phone),
             "Tag" to info.tag.ifBlank { "—" },
-            "Photo" to info.photoStatus,
             "Checked" to date
         )
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -171,16 +210,21 @@ object CardImageMaker {
         }
         val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xFFFFFFFF.toInt()
-            textSize = 34f
+            textSize = 36f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
+        var y = 1276f
         for ((label, value) in rows) {
-            y += 58f
-            val lab = label.uppercase() + "  "
-            c.drawText(lab, 150f, y, labelPaint)
+            val lab = label.uppercase() + "   "
+            c.drawText(lab, 110f, y, labelPaint)
             val lw = labelPaint.measureText(lab)
-            val maxW = W - 150f - lw - 40f
-            c.drawText(fitText(value, valuePaint, maxW), 150f + lw, y, valuePaint)
+            val maxW = card.right - 70f - (110f + lw)
+            c.drawText(fitText(value, valuePaint, maxW), 110f + lw, y + 4f, valuePaint)
+            if (label != "Checked") {
+                y += 78f
+                p.color = 0x22FFFFFF.toInt()
+                c.drawRect(100f, y - 30f, card.right - 60f, y - 28f, p)
+            }
         }
 
         // --- footer logo + text ---
@@ -209,6 +253,21 @@ object CardImageMaker {
         c.drawText("eyecon lite", cx, H - 65f, p)
 
         return bmp
+    }
+
+    private fun drawCover(c: Canvas, photo: Bitmap, dst: RectF, radius: Float, p: Paint) {
+        val path = Path()
+        path.addRoundRect(dst, radius, radius, Path.Direction.CW)
+        c.save()
+        c.clipPath(path)
+        val scale = maxOf(dst.width() / photo.width, dst.height() / photo.height)
+        val sw = dst.width() / scale
+        val sh = dst.height() / scale
+        val sx = (photo.width - sw) / 2f
+        val sy = (photo.height - sh) / 2f
+        val src = Rect(sx.toInt(), sy.toInt(), (sx + sw).toInt(), (sy + sh).toInt())
+        c.drawBitmap(photo, src, dst, p)
+        c.restore()
     }
 
     private fun fitText(text: String, paint: Paint, maxW: Float): String {

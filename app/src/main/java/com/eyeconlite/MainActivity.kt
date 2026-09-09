@@ -10,6 +10,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +33,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
@@ -62,6 +67,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -170,6 +179,7 @@ fun SearchScreen() {
     var result by remember { mutableStateOf<CallerInfo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var history by remember { mutableStateOf(listOf<String>()) }
+    var showFullPhoto by remember { mutableStateOf(false) }
 
     fun doSearch(number: String) {
         val q = number.trim()
@@ -411,7 +421,20 @@ fun SearchScreen() {
 
             result?.let { info ->
                 Spacer(Modifier.height(16.dp))
-                ResultCard(info = info, saving = saving, onDownload = { doDownload(info) })
+                ResultCard(
+                    info = info,
+                    saving = saving,
+                    onDownload = { doDownload(info) },
+                    onPhotoClick = { if (info.hasPhoto) showFullPhoto = true }
+                )
+            }
+
+            if (showFullPhoto && result != null) {
+                FullPhotoViewer(
+                    info = result!!,
+                    onDismiss = { showFullPhoto = false },
+                    onDownload = { doDownload(result!!) }
+                )
             }
 
             Spacer(Modifier.height(30.dp))
@@ -426,7 +449,12 @@ fun SearchScreen() {
 }
 
 @Composable
-fun ResultCard(info: CallerInfo, saving: Boolean, onDownload: () -> Unit) {
+fun ResultCard(
+    info: CallerInfo,
+    saving: Boolean,
+    onDownload: () -> Unit,
+    onPhotoClick: () -> Unit = {}
+) {
     val bmp = remember(info) { EyeconApi.decodePhoto(info.photoBytes) }
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -438,15 +466,43 @@ fun ResultCard(info: CallerInfo, saving: Boolean, onDownload: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(22.dp)
         ) {
-            // Photo
+            // Photo (tap for fullscreen)
             if (bmp != null) {
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = null,
+                Box(
+                    contentAlignment = Alignment.BottomEnd,
+                    modifier = Modifier.clickable { onPhotoClick() }
+                ) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "Tap to view full photo",
+                        modifier = Modifier
+                            .size(150.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color(0xFF0A1628).copy(alpha = 0.75f))
+                            .padding(7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.Fullscreen,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Text(
+                    "Tap photo for full view",
+                    fontSize = 11.sp,
+                    color = Color(0xFF2196F3),
+                    fontWeight = FontWeight.Medium,
                     modifier = Modifier
-                        .size(150.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
+                        .padding(top = 4.dp)
+                        .clickable { onPhotoClick() }
                 )
             } else {
                 Box(
@@ -548,6 +604,95 @@ fun ResultCard(info: CallerInfo, saving: Boolean, onDownload: () -> Unit) {
                 color = Color.Gray,
                 modifier = Modifier.padding(top = 6.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun FullPhotoViewer(info: CallerInfo, onDismiss: () -> Unit, onDownload: () -> Unit) {
+    val bmp = remember(info) { EyeconApi.decodePhoto(info.photoBytes) }
+    var zoom by remember { mutableStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
+    val zoomState = rememberTransformableState { zoomChange, panChange, _ ->
+        zoom = (zoom * zoomChange).coerceIn(1f, 5f)
+        pan = if (zoom > 1f) pan + panChange else Offset.Zero
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.96f))
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            info.name.ifBlank { "Unknown" },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                        Text(info.phone, color = Color.Gray, fontSize = 14.sp)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                    }
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "Full photo",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(8.dp)
+                                .graphicsLayer(
+                                    scaleX = zoom,
+                                    scaleY = zoom,
+                                    translationX = pan.x,
+                                    translationY = pan.y
+                                )
+                                .transformable(state = zoomState)
+                        )
+                    } else {
+                        Text("No photo", color = Color.Gray)
+                    }
+                }
+                Text(
+                    if (zoom > 1f) "Pinch to zoom out • Drag to move" else "Pinch to zoom • Tap ✕ to close",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = onDownload,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0B7B3E))
+                ) {
+                    Icon(Icons.Filled.Download, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Download PNG Card", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
