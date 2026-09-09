@@ -88,6 +88,7 @@ import com.eyeconlite.data.CallerInfo
 import com.eyeconlite.data.EyeconApi
 import com.eyeconlite.data.PhoneUtils
 import com.eyeconlite.ui.ContactsSyncCard
+import com.eyeconlite.ui.InstallStatsCard
 import com.eyeconlite.ui.SaveContactDialog
 import com.eyeconlite.ui.UpdateBell
 import com.eyeconlite.ui.UpdateCard
@@ -284,7 +285,6 @@ fun SearchScreen() {
 
             Spacer(Modifier.height(12.dp))
 
-            // Middle content: vertically centered when idle, scrolls when result shown
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -446,6 +446,7 @@ fun SearchScreen() {
             }
 
             Spacer(Modifier.height(14.dp))
+            InstallStatsCard()
             UpdateCard()
 
             if (showFullPhoto && result != null) {

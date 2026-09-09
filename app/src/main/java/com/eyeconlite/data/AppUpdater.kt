@@ -23,10 +23,12 @@ data class UpdateInfo(
     val apkSize: Long
 )
 
+class UpdateCheckException(message: String) : IllegalStateException(message)
+
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState
-    data object UpToDate : UpdateState
+    data class UpToDate(val message: String = "You have the latest version") : UpdateState
     data class Available(val info: UpdateInfo) : UpdateState
     data class Downloading(val progress: Float) : UpdateState
     data class Ready(val file: File, val info: UpdateInfo) : UpdateState
@@ -42,7 +44,6 @@ object AppUpdater {
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /** Fetch latest GitHub release that contains an APK asset. */
     suspend fun checkLatest(): UpdateInfo = withContext(Dispatchers.IO) {
         val req = Request.Builder()
             .url(API_LATEST)
@@ -50,7 +51,10 @@ object AppUpdater {
             .header("User-Agent", "EyeconLite-Updater")
             .build()
         client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("Update check failed (${resp.code})")
+            if (resp.code == 403) {
+                throw UpdateCheckException("GitHub update check is temporarily rate-limited")
+            }
+            if (!resp.isSuccessful) throw UpdateCheckException("Update check failed (${resp.code})")
             val json = JSONObject(resp.body?.string().orEmpty())
             val tag = json.optString("tag_name", "").trim()
             if (tag.isEmpty()) throw IllegalStateException("No release found")
@@ -70,6 +74,26 @@ object AppUpdater {
             }
             if (apkUrl.isEmpty()) throw IllegalStateException("No APK in latest release")
             UpdateInfo(tag, tag.trimStart('v', 'V'), notes, apkUrl, apkSize)
+        }
+    }
+
+    suspend fun fetchInstallEstimate(): Long = withContext(Dispatchers.IO) {
+        val req = Request.Builder()
+            .url("https://api.github.com/repos/$REPO/releases?per_page=100")
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "EyeconLite-Stats")
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IllegalStateException("Stats unavailable (${resp.code})")
+            val releases = org.json.JSONArray(resp.body?.string().orEmpty())
+            var total = 0L
+            for (i in 0 until releases.length()) {
+                val assets = releases.getJSONObject(i).optJSONArray("assets") ?: continue
+                for (j in 0 until assets.length()) {
+                    total += assets.getJSONObject(j).optLong("download_count", 0L)
+                }
+            }
+            total
         }
     }
 

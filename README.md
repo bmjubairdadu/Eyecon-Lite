@@ -1,4 +1,4 @@
-# Eyecon Lite — Finding Anyone
+# Eyecon Lite
 
 Premium caller-identification Android app. Search any number, see the caller's name and photo,
 and download a stylish portrait PNG card straight to the Download folder.
@@ -16,7 +16,9 @@ and download a stylish portrait PNG card straight to the Download folder.
   are fetched in the background (WorkManager, internet required) and saved permanently
   on your phonebook contacts. Existing photos and names are never changed, each
   contact is processed only once — reopening the app does not rescan
-- Auto-update from GitHub releases + recent search history
+- Live contact-number scan status with contact name, lookup result, and saved-photo result
+- Auto-update from GitHub releases with clear current-version status
+- GitHub APK-download estimate shown in the app
 
 ## Build
 
@@ -25,12 +27,19 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 .\gradlew :app:assembleDebug
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`
+APK: `apk/Eyecon Lite.apk`
 Prebuilt APK is attached to the GitHub release.
 
 ## Author
 
 Developed by **JUBAIR HOSEN**.
+
+## Protection
+
+Release builds enable R8 shrinking, obfuscation, resource shrinking, backup
+disablement, and cleartext traffic blocking. A client APK cannot keep API
+credentials completely secret; production deployments should proxy sensitive
+API access through a server.
 
 ## Project structure
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -84,12 +85,6 @@ fun hasContactPermissions(context: Context): Boolean {
         ) == PackageManager.PERMISSION_GRANTED
 }
 
-/**
- * Contacts permission + one-time background photo sync card.
- * After permission: all numbers are scanned (photo API only), found photos are
- * saved permanently on the matching contacts. Contacts that already have a
- * photo are skipped, names are never changed, and the scan never auto-repeats.
- */
 @Composable
 fun ContactsSyncCard() {
     val context = LocalContext.current
@@ -101,6 +96,10 @@ fun ContactsSyncCard() {
     var updatedCount by remember { mutableStateOf(ContactsSync.getUpdatedCount(context)) }
     var finished by remember { mutableStateOf(ContactsSync.isDone(context)) }
     var status by remember { mutableStateOf<String?>(null) }
+    var currentNumber by remember { mutableStateOf("") }
+    var currentName by remember { mutableStateOf("") }
+    var currentStatus by remember { mutableStateOf("") }
+    var events by remember { mutableStateOf(emptyList<String>()) }
 
     fun refresh() {
         updatedCount = ContactsSync.getUpdatedCount(context)
@@ -142,6 +141,13 @@ fun ContactsSyncCard() {
                     totalCount = p.getInt("total", totalCount)
                     doneCount = p.getInt("done", doneCount)
                     updatedCount = p.getInt("updated", updatedCount)
+                    currentNumber = p.getString("currentNumber").orEmpty()
+                    currentName = p.getString("currentName").orEmpty()
+                    currentStatus = p.getString("currentStatus").orEmpty()
+                    events = p.getString("events")
+                        .orEmpty()
+                        .split('\n')
+                        .filter { it.isNotBlank() }
                     when (wi.state) {
                         WorkInfo.State.SUCCEEDED -> {
                             running = false
@@ -158,7 +164,7 @@ fun ContactsSyncCard() {
                             running = false
                             break
                         }
-                        else -> { /* ENQUEUED / RUNNING / BLOCKED: keep polling */ }
+                        else -> Unit
                     }
                 }
             } catch (e: Exception) {
@@ -179,7 +185,6 @@ fun ContactsSyncCard() {
         }
     }
 
-    // Auto-start one-time scan right after permission is available
     LaunchedEffect(hasPerms) {
         if (hasPerms && !ContactsSync.isDone(context) && !running) {
             startSync(force = false)
@@ -268,6 +273,28 @@ fun ContactsSyncCard() {
                             .height(6.dp)
                             .clip(RoundedCornerShape(3.dp))
                     )
+                    if (currentNumber.isNotBlank()) {
+                        Text(
+                            "$currentStatus: ${currentName.ifBlank { "Unknown contact" }} — $currentNumber",
+                            color = Color(0xFFBFE0FF),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    if (events.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp)
+                                .verticalScroll(rememberScrollState())
+                                .padding(top = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            events.forEach { event ->
+                                Text(event, color = Color.Gray, fontSize = 11.sp)
+                            }
+                        }
+                    }
                     Text(
                         "Keep internet on — continues even if the app is closed",
                         color = Color.Gray,
@@ -315,10 +342,6 @@ fun ContactsSyncCard() {
     }
 }
 
-/**
- * Save-to-contacts dialog: found photo + name + number are pre-filled,
- * the user can customize before saving to their own phonebook.
- */
 @Composable
 fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
     val context = LocalContext.current

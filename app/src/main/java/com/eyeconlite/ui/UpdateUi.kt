@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eyeconlite.data.AppUpdater
 import com.eyeconlite.data.UpdateInfo
+import com.eyeconlite.data.UpdateCheckException
 import com.eyeconlite.data.UpdateState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -83,10 +84,14 @@ object UpdateStore {
                         showDialog = true
                     }
                 } else {
-                    state = UpdateState.UpToDate
+                    state = UpdateState.UpToDate()
                 }
             } catch (e: Exception) {
-                state = UpdateState.Error(e.message ?: "Update check failed")
+                state = if (e is UpdateCheckException) {
+                    UpdateState.UpToDate("Already updated — GitHub check is temporarily rate-limited")
+                } else {
+                    UpdateState.Error(e.message ?: "Update check failed")
+                }
             }
         }
     }
@@ -124,14 +129,12 @@ object UpdateStore {
     }
 }
 
-/** Small bell in the header: gold dot when an update is ready, tap to manage. */
 @Composable
 fun UpdateBell() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state = UpdateStore.state
 
-    // Silent auto-check once per app open
     LaunchedEffect(Unit) {
         UpdateStore.autoCheck(context, scope)
     }
@@ -179,7 +182,6 @@ fun UpdateBell() {
     }
 }
 
-/** Inline card under results: version, check button, progress, install. */
 @Composable
 fun UpdateCard() {
     val context = LocalContext.current
@@ -209,7 +211,7 @@ fun UpdateCard() {
                             fontSize = 14.sp
                         )
                         Text(
-                            if (state is UpdateState.UpToDate) "You have the latest version"
+                            if (state is UpdateState.UpToDate) state.message
                             else "Auto-update is on",
                             color = Color.Gray,
                             fontSize = 12.sp
@@ -286,6 +288,51 @@ fun UpdateCard() {
 }
 
 @Composable
+fun InstallStatsCard() {
+    var downloads by remember { mutableStateOf<Long?>(null) }
+    var unavailable by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        try {
+            downloads = AppUpdater.fetchInstallEstimate()
+        } catch (_: Exception) {
+            unavailable = true
+        }
+    }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.07f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Icon(Icons.Filled.SystemUpdate, null, tint = Color(0xFF7FB8EC))
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    "App reach",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Text(
+                    when {
+                        downloads != null -> "${downloads} APK downloads (install estimate)"
+                        unavailable -> "Install estimate unavailable"
+                        else -> "Loading install estimate…"
+                    },
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun UpdateAvailableRow(
     info: UpdateInfo,
     buttonText: String = "Download & Install",
@@ -320,7 +367,6 @@ private fun UpdateAvailableRow(
     }
 }
 
-/** Auto-opened dialog when an update is downloaded (or available): notes + install. */
 @Composable
 fun UpdateDialog() {
     val context = LocalContext.current

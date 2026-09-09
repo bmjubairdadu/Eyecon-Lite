@@ -25,7 +25,6 @@ object ContactsSync {
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** All phonebook contacts that have at least one number. */
     fun readContacts(context: Context): List<DeviceContact> {
         val cr = context.contentResolver
         val out = ArrayList<DeviceContact>()
@@ -82,10 +81,6 @@ object ContactsSync {
         return nums.distinct()
     }
 
-    /**
-     * Permanently save [photoBytes] as the contact's profile photo.
-     * Only the photo is written — the name is never changed.
-     */
     fun setContactPhoto(context: Context, contactId: Long, photoBytes: ByteArray): Boolean {
         return try {
             val cr = context.contentResolver
@@ -147,10 +142,6 @@ object ContactsSync {
         }
     }
 
-    /**
-     * Create a new phonebook contact with name + number + photo.
-     * Called with user-confirmed (customizable) values from the save dialog.
-     */
     fun saveNewContact(
         context: Context,
         name: String,
@@ -207,8 +198,6 @@ object ContactsSync {
             false
         }
     }
-
-    // ---- one-time scan bookkeeping (never auto-rescans) ----
 
     fun isDone(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DONE, false)

@@ -13,17 +13,20 @@ android {
         applicationId = "com.eyeconlite"
         minSdk = 24
         targetSdk = 37
-        versionCode = 11
-        versionName = "1.10"
+        versionCode = 1
+        versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "src/main/keepRules/rules.keep"
+            )
         }
     }
     compileOptions {

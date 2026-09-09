@@ -6,13 +6,6 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.delay
 
-/**
- * Background scan: for every phonebook contact that has NO profile photo yet,
- * fetch only the photo and save it permanently on the contact.
- * Names are never touched. Already-processed contacts are skipped forever,
- * so reopening the app does not rescan. Runs even when the app is closed
- * (WorkManager, requires internet via constraints set at enqueue time).
- */
 class ContactPhotoSyncWorker(
     appContext: Context,
     params: WorkerParameters
@@ -35,38 +28,62 @@ class ContactPhotoSyncWorker(
                 !c.hasPhoto &&
                 !ContactsSync.isContactSynced(applicationContext, c.id)
         }
-        val total = pending.size
+        val total = pending.sumOf { it.numbers.distinct().size }
         var done = 0
         var updated = ContactsSync.getUpdatedCount(applicationContext)
-        setProgress(workDataOf("total" to total, "done" to 0, "updated" to updated))
+        val events = ArrayDeque<String>()
+
+        suspend fun publish(number: String, name: String, status: String) {
+            events.addFirst("$name | $number | $status")
+            while (events.size > 12) events.removeLast()
+            setProgress(
+                workDataOf(
+                    "total" to total,
+                    "done" to done,
+                    "updated" to updated,
+                    "currentNumber" to number,
+                    "currentName" to name,
+                    "currentStatus" to status,
+                    "events" to events.joinToString("\n")
+                )
+            )
+        }
 
         for (c in pending) {
             if (isStopped) return Result.retry() // synced ids persist; continues later
             var saved = false
             for (num in c.numbers.distinct()) {
+                publish(num, c.name, "Scanning")
                 try {
                     val bytes = EyeconApi.fetchPhotoForNumber(num)
-                    if (bytes != null &&
-                        ContactsSync.setContactPhoto(applicationContext, c.id, bytes)
-                    ) {
+                    if (bytes == null) {
+                        publish(num, c.name, "No photo found")
+                    } else if (!saved && ContactsSync.setContactPhoto(applicationContext, c.id, bytes)) {
                         saved = true
                         updated++
-                        break
+                        publish(num, c.name, "Photo saved")
+                    } else {
+                        publish(num, c.name, "Photo found")
                     }
                 } catch (_: Exception) {
-                    // try next number of the same contact
+                    publish(num, c.name, "Lookup failed")
                 }
+                done++
+                delay(350)
             }
             ContactsSync.markContactSynced(applicationContext, c.id, saved)
-            done++
-            if (done % 2 == 0 || done == total) {
-                setProgress(workDataOf("total" to total, "done" to done, "updated" to updated))
-            }
-            delay(350) // be polite to the API
         }
 
         ContactsSync.setDone(applicationContext, true)
-        setProgress(workDataOf("total" to total, "done" to done, "updated" to updated))
+        setProgress(
+            workDataOf(
+                "total" to total,
+                "done" to done,
+                "updated" to updated,
+                "currentStatus" to "Scan complete",
+                "events" to events.joinToString("\n")
+            )
+        )
         return Result.success(workDataOf("total" to total, "done" to done, "updated" to updated))
     }
 }
