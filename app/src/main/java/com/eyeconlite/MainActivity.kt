@@ -44,7 +44,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -82,10 +81,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.eyeconlite.data.AppUpdater
 import com.eyeconlite.data.CardImageMaker
 import com.eyeconlite.data.CallerInfo
 import com.eyeconlite.data.EyeconApi
 import com.eyeconlite.data.PhoneUtils
+import com.eyeconlite.ui.UpdateBell
+import com.eyeconlite.ui.UpdateCard
 import com.eyeconlite.ui.theme.EyeconLiteTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -273,11 +275,7 @@ fun SearchScreen() {
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                Icon(
-                    Icons.Filled.Shield,
-                    contentDescription = null,
-                    tint = Color(0xFF4CAF50)
-                )
+                UpdateBell()
             }
 
             Spacer(Modifier.height(12.dp))
@@ -438,6 +436,9 @@ fun SearchScreen() {
                     onPhotoClick = { if (info.hasPhoto) showFullPhoto = true }
                 )
             }
+
+            Spacer(Modifier.height(14.dp))
+            UpdateCard()
 
             if (showFullPhoto && result != null) {
                 FullPhotoViewer(
