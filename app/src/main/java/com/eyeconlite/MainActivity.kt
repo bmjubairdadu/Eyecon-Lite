@@ -310,7 +310,8 @@ fun SearchScreen() {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
-                        placeholder = { Text("+880 17XX-XXXXXX / 017XXXXXXXX", color = Color.Gray) },
+                        label = { Text("Enter your number", color = Color.Gray) },
+                        placeholder = { Text("Enter your number", color = Color.Gray.copy(alpha = 0.6f)) },
                         leadingIcon = {
                             Icon(Icons.Filled.Call, null, tint = Color(0xFF2196F3))
                         },
@@ -354,7 +355,7 @@ fun SearchScreen() {
                     } else if (query.trim().isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Formats: +8801XXXXXXXXX, 008801..., 01XXXXXXXXX",
+                            "Enter a valid phone number",
                             color = Color.Gray,
                             fontSize = 11.sp
                         )
