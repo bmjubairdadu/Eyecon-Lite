@@ -352,6 +352,7 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
     var phone by remember {
         mutableStateOf(info.normalized?.nationalFormat ?: info.phone)
     }
+    var email by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     val bmp = remember(info) { EyeconApi.decodePhoto(info.photoBytes) }
@@ -363,18 +364,20 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
         }
         saving = true
         scope.launch {
+            val meta = ContactsSync.buildSavedMeta(context, email)
             val ok = withContext(Dispatchers.IO) {
                 ContactsSync.saveNewContact(
                     context,
                     name.trim(),
                     phone.trim(),
-                    info.photoBytes
+                    info.photoBytes,
+                    email = email.trim()
                 )
             }
             saving = false
             Toast.makeText(
                 context,
-                if (ok) "Saved to contacts" else "Save failed",
+                if (ok) "Saved to contacts • ${meta.device} • ${meta.sim} • ${meta.email}" else "Save failed",
                 Toast.LENGTH_LONG
             ).show()
             if (ok) onDismiss()
@@ -479,6 +482,28 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
                     ),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email (optional)") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFFF5D67B),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                        cursorColor = Color(0xFFF5D67B)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    ContactsSync.formatSavedSummary(context, email),
+                    color = Color(0xFF9DB9D6),
+                    fontSize = 12.sp
                 )
             }
         },

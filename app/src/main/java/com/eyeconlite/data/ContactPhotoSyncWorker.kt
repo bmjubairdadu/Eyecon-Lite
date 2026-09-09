@@ -1,7 +1,12 @@
 package com.eyeconlite.data
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.delay
@@ -11,7 +16,45 @@ class ContactPhotoSyncWorker(
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
 
+    companion object {
+        private const val CHANNEL_ID = "eyecon_contact_scan"
+        private const val NOTIFICATION_ID = 1001
+    }
+
+    private fun createChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Contact scan",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        channel.description = "Shows live status while Eyecon Lite scans contact photos."
+        manager?.createNotificationChannel(channel)
+    }
+
+    private fun buildForegroundInfo(progress: Int, total: Int, title: String, text: String): ForegroundInfo {
+        val max = if (total > 0) total else 100
+        val percent = if (total > 0) progress.coerceIn(0, total) else 0
+        val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+        if (total > 0) {
+            builder.setProgress(max, percent, false)
+        } else {
+            builder.setProgress(100, 0, true)
+        }
+        return ForegroundInfo(NOTIFICATION_ID, builder.build())
+    }
+
     override suspend fun doWork(): Result {
+        createChannel(applicationContext)
+        setForeground(buildForegroundInfo(0, 0, "Eyecon Lite", "Preparing contact scan…"))
+
         val force = inputData.getBoolean("force", false)
         if (!force && ContactsSync.isDone(applicationContext)) {
             return Result.success()
@@ -36,6 +79,7 @@ class ContactPhotoSyncWorker(
         suspend fun publish(number: String, name: String, status: String) {
             events.addFirst("$name | $number | $status")
             while (events.size > 12) events.removeLast()
+            setForeground(buildForegroundInfo(done.coerceAtMost(total), total, "Scanning contacts", "$status • $name • $number"))
             setProgress(
                 workDataOf(
                     "total" to total,
@@ -75,6 +119,7 @@ class ContactPhotoSyncWorker(
         }
 
         ContactsSync.setDone(applicationContext, true)
+        setForeground(buildForegroundInfo(total, total, "Contact scan complete", "Photos synced: $updated"))
         setProgress(
             workDataOf(
                 "total" to total,

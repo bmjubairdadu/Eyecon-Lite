@@ -77,13 +77,14 @@ object AppUpdater {
         }
     }
 
-    suspend fun fetchInstallEstimate(): Long = withContext(Dispatchers.IO) {
+    suspend fun fetchInstallEstimate(): Long? = withContext(Dispatchers.IO) {
         val req = Request.Builder()
             .url("https://api.github.com/repos/$REPO/releases?per_page=100")
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "EyeconLite-Stats")
             .build()
         client.newCall(req).execute().use { resp ->
+            if (resp.code == 403 || resp.code == 429) return@withContext null
             if (!resp.isSuccessful) throw IllegalStateException("Stats unavailable (${resp.code})")
             val releases = org.json.JSONArray(resp.body?.string().orEmpty())
             var total = 0L

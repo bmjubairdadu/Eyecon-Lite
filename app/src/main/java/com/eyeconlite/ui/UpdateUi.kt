@@ -61,11 +61,9 @@ object UpdateStore {
     var showDialog: Boolean by mutableStateOf(false)
     private var autoStarted = false
 
-    /** Called once when the app opens: silent check + auto-download if newer release exists. */
+    /** GitHub auto-update is disabled by design; manual "Check" remains available. */
     fun autoCheck(context: android.content.Context, scope: CoroutineScope) {
-        if (autoStarted) return
-        autoStarted = true
-        check(context, scope, autoDownload = true)
+        // no automatic update check or download; keep app behavior manual-only
     }
 
     fun check(context: android.content.Context, scope: CoroutineScope, autoDownload: Boolean = false) {
@@ -84,11 +82,11 @@ object UpdateStore {
                         showDialog = true
                     }
                 } else {
-                    state = UpdateState.UpToDate()
+                    state = UpdateState.UpToDate("Your app is already up to date")
                 }
             } catch (e: Exception) {
                 state = if (e is UpdateCheckException) {
-                    UpdateState.UpToDate("Already updated — GitHub check is temporarily rate-limited")
+                    UpdateState.UpToDate("GitHub check is temporarily rate-limited — check manually")
                 } else {
                     UpdateState.Error(e.message ?: "Update check failed")
                 }
@@ -135,9 +133,7 @@ fun UpdateBell() {
     val scope = rememberCoroutineScope()
     val state = UpdateStore.state
 
-    LaunchedEffect(Unit) {
-        UpdateStore.autoCheck(context, scope)
-    }
+    // GitHub auto-update is intentionally disabled. Users can check manually.
 
     val hasUpdate = state is UpdateState.Available ||
         state is UpdateState.Downloading ||

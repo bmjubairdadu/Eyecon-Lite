@@ -3,7 +3,9 @@ package com.eyeconlite.data
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
 import android.content.Context
+import android.os.Build
 import android.provider.ContactsContract
+import android.telephony.TelephonyManager
 
 data class DeviceContact(
     val id: Long,
@@ -11,6 +13,13 @@ data class DeviceContact(
     val name: String,
     val numbers: List<String>,
     val hasPhoto: Boolean
+)
+
+data class SavedContactMeta(
+    val device: String,
+    val sim: String,
+    val email: String,
+    val savedAt: Long
 )
 
 object ContactsSync {
@@ -24,6 +33,28 @@ object ContactsSync {
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    fun buildSavedMeta(context: Context, email: String? = null): SavedContactMeta {
+        val device = "${Build.MANUFACTURER ?: "Unknown"} ${Build.MODEL ?: "Device"}".trim()
+        val sim = runCatching {
+            val tm = context.getSystemService(TelephonyManager::class.java)
+            listOfNotNull(
+                tm?.simOperatorName,
+                tm?.networkOperatorName
+            ).firstOrNull { it.isNotBlank() }
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Unavailable"
+        return SavedContactMeta(
+            device = device.ifBlank { "Unknown device" },
+            sim = sim.ifBlank { "Unavailable" },
+            email = email?.trim().orEmpty().ifBlank { "Not provided" },
+            savedAt = System.currentTimeMillis()
+        )
+    }
+
+    fun formatSavedSummary(context: Context, email: String? = null): String {
+        val meta = buildSavedMeta(context, email)
+        return "Device: ${meta.device} • SIM: ${meta.sim} • Email: ${meta.email}"
+    }
 
     fun readContacts(context: Context): List<DeviceContact> {
         val cr = context.contentResolver
@@ -146,9 +177,11 @@ object ContactsSync {
         context: Context,
         name: String,
         phone: String,
-        photoBytes: ByteArray?
+        photoBytes: ByteArray?,
+        email: String? = null
     ): Boolean {
         return try {
+            val cleanEmail = email?.trim().orEmpty()
             val ops = ArrayList<ContentProviderOperation>()
             ops.add(
                 ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
@@ -180,6 +213,22 @@ object ContactsSync {
                     )
                     .build()
             )
+            if (cleanEmail.isNotEmpty()) {
+                ops.add(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                        .withValue(
+                            ContactsContract.Data.MIMETYPE,
+                            ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE
+                        )
+                        .withValue(ContactsContract.CommonDataKinds.Email.ADDRESS, cleanEmail)
+                        .withValue(
+                            ContactsContract.CommonDataKinds.Email.TYPE,
+                            ContactsContract.CommonDataKinds.Email.TYPE_HOME
+                        )
+                        .build()
+                )
+            }
             if (photoBytes != null && photoBytes.isNotEmpty()) {
                 ops.add(
                     ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
