@@ -11,7 +11,12 @@ and download a stylish portrait PNG card straight to the Download folder.
 - Number search with automatic format normalization (`+880...`, `00880...`, `01...`)
 - Result card: photo (tap for fullscreen + pinch zoom), name, country, operator, type
 - Download button: stylish **1080×1920 portrait PNG** → `Download/EyeconLite_<number>.png`
-- Recent search history (last 6)
+- **Save to Contacts button**: found photo + name + number pre-filled, editable before saving
+- **Contact Photos auto-sync**: grant contacts permission once → missing profile photos
+  are fetched in the background (WorkManager, internet required) and saved permanently
+  on your phonebook contacts. Existing photos and names are never changed, each
+  contact is processed only once — reopening the app does not rescan
+- Auto-update from GitHub releases + recent search history
 
 ## Build
 

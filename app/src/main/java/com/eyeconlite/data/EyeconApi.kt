@@ -94,7 +94,7 @@ object EyeconApi {
             // keep silent: photo may still resolve; only hard-fail when nothing tried well
         }
 
-        val photo = fetchPhoto(norm.e164Digits) ?: fetchPhoto(variants.lastOrNull() ?: norm.e164Digits)
+        val photo = fetchPhotoForNumber(rawInput)
         CallerInfo(
             name = name.ifBlank { "Unknown" },
             phone = norm.displayPlus,
@@ -102,6 +102,23 @@ object EyeconApi {
             photoBytes = photo,
             normalized = norm
         )
+    }
+
+    /** Photo-only lookup: try normalized variants, return first bytes found (or null). */
+    suspend fun fetchPhotoForNumber(rawInput: String): ByteArray? = withContext(Dispatchers.IO) {
+        val norm = try {
+            PhoneUtils.normalize(rawInput)
+        } catch (_: Exception) {
+            return@withContext null
+        }
+        for (cli in PhoneUtils.lookupVariants(norm)) {
+            try {
+                val bytes = fetchPhoto(cli)
+                if (bytes != null) return@withContext bytes
+            } catch (_: Exception) {
+            }
+        }
+        null
     }
 
     private fun fetchPhoto(cli: String): ByteArray? {

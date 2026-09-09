@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
@@ -86,6 +87,8 @@ import com.eyeconlite.data.CardImageMaker
 import com.eyeconlite.data.CallerInfo
 import com.eyeconlite.data.EyeconApi
 import com.eyeconlite.data.PhoneUtils
+import com.eyeconlite.ui.ContactsSyncCard
+import com.eyeconlite.ui.SaveContactDialog
 import com.eyeconlite.ui.UpdateBell
 import com.eyeconlite.ui.UpdateCard
 import com.eyeconlite.ui.theme.EyeconLiteTheme
@@ -182,6 +185,7 @@ fun SearchScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var history by remember { mutableStateOf(listOf<String>()) }
     var showFullPhoto by remember { mutableStateOf(false) }
+    var showSaveDialog by remember { mutableStateOf(false) }
 
     fun doSearch(number: String) {
         val q = number.trim()
@@ -427,13 +431,17 @@ fun SearchScreen() {
                 Text(it, color = Color(0xFFFF8A80), fontSize = 14.sp, textAlign = TextAlign.Center)
             }
 
+            Spacer(Modifier.height(14.dp))
+            ContactsSyncCard()
+
             result?.let { info ->
                 Spacer(Modifier.height(16.dp))
                 ResultCard(
                     info = info,
                     saving = saving,
                     onDownload = { doDownload(info) },
-                    onPhotoClick = { if (info.hasPhoto) showFullPhoto = true }
+                    onPhotoClick = { if (info.hasPhoto) showFullPhoto = true },
+                    onSaveClick = { showSaveDialog = true }
                 )
             }
 
@@ -445,6 +453,13 @@ fun SearchScreen() {
                     info = result!!,
                     onDismiss = { showFullPhoto = false },
                     onDownload = { doDownload(result!!) }
+                )
+            }
+
+            if (showSaveDialog && result != null) {
+                SaveContactDialog(
+                    info = result!!,
+                    onDismiss = { showSaveDialog = false }
                 )
             }
 
@@ -473,7 +488,8 @@ fun ResultCard(
     info: CallerInfo,
     saving: Boolean,
     onDownload: () -> Unit,
-    onPhotoClick: () -> Unit = {}
+    onPhotoClick: () -> Unit = {},
+    onSaveClick: () -> Unit = {}
 ) {
     val bmp = remember(info) { EyeconApi.decodePhoto(info.photoBytes) }
     Card(
@@ -619,6 +635,30 @@ fun ResultCard(
             }
             Text(
                 "1080×1920 stylish card → Download folder",
+                fontSize = 11.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = onSaveClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37))
+            ) {
+                Icon(Icons.Filled.PersonAdd, null, tint = Color(0xFF3A2E05))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Save to Contacts",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = Color(0xFF3A2E05)
+                )
+            }
+            Text(
+                "Name, number & photo pre-filled — edit before saving",
                 fontSize = 11.sp,
                 color = Color.Gray,
                 modifier = Modifier.padding(top = 6.dp)
