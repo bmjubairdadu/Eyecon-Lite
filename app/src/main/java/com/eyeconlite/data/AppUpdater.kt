@@ -51,10 +51,10 @@ object AppUpdater {
             .header("User-Agent", "EyeconLite-Updater")
             .build()
         client.newCall(req).execute().use { resp ->
-            if (resp.code == 403) {
-                throw UpdateCheckException("Update check unavailable")
+            if (resp.code == 403 || resp.code == 429) {
+                throw UpdateCheckException("Couldn't check right now. Try again later.")
             }
-            if (!resp.isSuccessful) throw UpdateCheckException("Check failed (${resp.code})")
+            if (!resp.isSuccessful) throw UpdateCheckException("Couldn't check right now. Try again later.")
             val json = JSONObject(resp.body?.string().orEmpty())
             val tag = json.optString("tag_name", "").trim()
             if (tag.isEmpty()) throw IllegalStateException("No release found")

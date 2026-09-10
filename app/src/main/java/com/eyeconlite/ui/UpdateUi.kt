@@ -1,4 +1,4 @@
-﻿package com.eyeconlite.ui
+package com.eyeconlite.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -59,11 +59,32 @@ import java.io.File
 object UpdateStore {
     var state: UpdateState by mutableStateOf(UpdateState.Idle)
     var showDialog: Boolean by mutableStateOf(false)
+    var pendingInfo: UpdateInfo? by mutableStateOf(null)
+        private set
     private var autoStarted = false
 
-    /** Automatic update check is disabled; manual "Check" remains available. */
+    /** Silent automatic check on startup; shows dialog only when a new version exists. */
     fun autoCheck(context: android.content.Context, scope: CoroutineScope) {
-        // no automatic update check or download; keep app behavior manual-only
+        if (autoStarted) return
+        autoStarted = true
+        // Don't override an in-progress manual check.
+        if (state !is UpdateState.Idle) return
+        scope.launch {
+            try {
+                val latest = AppUpdater.checkLatest()
+                val current = AppUpdater.currentVersionName(context)
+                // Only touch UI when still idle so a manual check is never overwritten.
+                if (state !is UpdateState.Idle) return@launch
+                if (AppUpdater.isNewer(latest.tag, current)) {
+                    pendingInfo = latest
+                    state = UpdateState.Available(latest)
+                    showDialog = true
+                }
+                // Else: stay silent on Idle so a fresh launch never pops "already updated".
+            } catch (_: Exception) {
+                // Stay silent on startup failure (offline/limit): keep idle UI, no error text.
+            }
+        }
     }
 
     fun check(context: android.content.Context, scope: CoroutineScope, autoDownload: Boolean = false) {
@@ -75,6 +96,7 @@ object UpdateStore {
                 val latest = AppUpdater.checkLatest()
                 val current = AppUpdater.currentVersionName(context)
                 if (AppUpdater.isNewer(latest.tag, current)) {
+                    pendingInfo = latest
                     if (autoDownload) {
                         download(context, scope, latest)
                     } else {
@@ -82,19 +104,25 @@ object UpdateStore {
                         showDialog = true
                     }
                 } else {
+                    pendingInfo = null
                     state = UpdateState.UpToDate("App already updated")
                 }
-            } catch (e: Exception) {
-                state = if (e is UpdateCheckException) {
-                    UpdateState.UpToDate("App already updated")
-                } else {
-                    UpdateState.Error(e.message ?: "Update check failed")
-                }
+            } catch (_: Exception) {
+                // Generic message only; never expose backend or limit details.
+                state = UpdateState.Error("Couldn't check for updates. Please try again.")
             }
         }
     }
 
+    fun acknowledge() {
+        // "Done" just returns the card to its idle state.
+        if (state is UpdateState.UpToDate) state = UpdateState.Idle
+        showDialog = false
+    }
+
     fun download(context: android.content.Context, scope: CoroutineScope, info: UpdateInfo) {
+        if (state is UpdateState.Downloading) return
+        pendingInfo = info
         state = UpdateState.Downloading(0f)
         scope.launch {
             try {
@@ -133,7 +161,9 @@ fun UpdateBell() {
     val scope = rememberCoroutineScope()
     val state = UpdateStore.state
 
-    // Automatic update check is intentionally disabled. Users can check manually.
+    LaunchedEffect(Unit) {
+        UpdateStore.autoCheck(context, scope)
+    }
 
     val hasUpdate = state is UpdateState.Available ||
         state is UpdateState.Downloading ||
@@ -213,7 +243,10 @@ fun UpdateCard() {
                             fontSize = 12.sp
                         )
                     }
-                    TextButton(onClick = { UpdateStore.check(context, scope) }) {
+                    TextButton(onClick = {
+                        if (state is UpdateState.UpToDate) UpdateStore.acknowledge()
+                        else UpdateStore.check(context, scope)
+                    }) {
                         val doneLabel = if (state is UpdateState.UpToDate) "Done" else "Check"
                         Text(doneLabel, color = Color(0xFFF5D67B), fontWeight = FontWeight.Bold)
                     }
@@ -230,7 +263,7 @@ fun UpdateCard() {
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("Checking for updatesâ€¦", color = Color.White, fontSize = 14.sp)
+                    Text("Checking for updates...", color = Color.White, fontSize = 14.sp)
                 }
             }
             is UpdateState.Available -> {
@@ -242,7 +275,7 @@ fun UpdateCard() {
             is UpdateState.Downloading -> {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        "Downloading updateâ€¦ ${(state.progress * 100).toInt()}%",
+                        "Downloading update... ${(state.progress * 100).toInt()}%",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
@@ -309,7 +342,7 @@ fun InstallStatsCard() {
                     fontSize = 14.sp
                 )
                 Text(
-                    if (ready) "Installed on this device" else "Checking status…",
+                    if (ready) "Installed on this device" else "Checking status.",
                     color = Color.Gray,
                     fontSize = 12.sp
                 )
@@ -362,7 +395,7 @@ fun UpdateDialog() {
     val info: UpdateInfo? = when (state) {
         is UpdateState.Available -> state.info
         is UpdateState.Ready -> state.info
-        else -> null
+        else -> UpdateStore.pendingInfo
     }
     val file: File? = (state as? UpdateState.Ready)?.file
     val progress: Float? = (state as? UpdateState.Downloading)?.progress
@@ -389,7 +422,7 @@ fun UpdateDialog() {
             ) {
                 Text(
                     "A new version of Eyecon Lite is available. " +
-                        "Download it and install to upgrade automatically â€” no need to uninstall.",
+                        "Download it and install to upgrade automatically  -  no need to uninstall.",
                     color = Color(0xFF9DB9D6),
                     fontSize = 13.sp
                 )
@@ -413,7 +446,7 @@ fun UpdateDialog() {
                             .clip(RoundedCornerShape(3.dp))
                     )
                     Text(
-                        "Downloadingâ€¦ ${(progress * 100).toInt()}%",
+                        "Downloading... ${(progress * 100).toInt()}%",
                         color = Color.Gray,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 4.dp)
