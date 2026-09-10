@@ -33,8 +33,13 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -342,6 +347,7 @@ fun ContactsSyncCard() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -355,7 +361,21 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    var destinations by remember {
+        mutableStateOf(ContactsSync.listSaveDestinations(context))
+    }
+    var selected by remember { mutableStateOf(destinations.first()) }
     val bmp = remember(info) { EyeconApi.decodePhoto(info.photoBytes) }
+
+    LaunchedEffect(Unit) {
+        destinations = withContext(Dispatchers.IO) {
+            ContactsSync.listSaveDestinations(context)
+        }
+        if (destinations.none { it.label == selected.label && it.detail == selected.detail }) {
+            selected = destinations.first()
+        }
+    }
 
     fun doSave() {
         if (name.isBlank()) {
@@ -363,21 +383,23 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
             return
         }
         saving = true
+        val dest = selected
         scope.launch {
-            val meta = ContactsSync.buildSavedMeta(context, email)
             val ok = withContext(Dispatchers.IO) {
                 ContactsSync.saveNewContact(
                     context,
                     name.trim(),
                     phone.trim(),
                     info.photoBytes,
-                    email = email.trim()
+                    email = email.trim(),
+                    destination = dest
                 )
             }
             saving = false
             Toast.makeText(
                 context,
-                if (ok) "Saved to contacts • ${meta.device} • ${meta.sim} • ${meta.email}" else "Save failed",
+                if (ok) "Saved to ${dest.label}" +
+                    if (dest.sim) " • name + number only" else "" else "Save failed",
                 Toast.LENGTH_LONG
             ).show()
             if (ok) onDismiss()
@@ -500,11 +522,62 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    ContactsSync.formatSavedSummary(context, email),
-                    color = Color(0xFF9DB9D6),
-                    fontSize = 12.sp
-                )
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = selected.label,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Save to") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFFF5D67B),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                            cursorColor = Color(0xFFF5D67B)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        destinations.forEach { dest ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(dest.label)
+                                        Text(
+                                            dest.detail,
+                                            fontSize = 12.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    selected = dest
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                if (selected.sim) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "SIM stores name + number only — email and photo are skipped.",
+                        color = Color(0xFF9DB9D6),
+                        fontSize = 12.sp
+                    )
+                }
             }
         },
         confirmButton = {

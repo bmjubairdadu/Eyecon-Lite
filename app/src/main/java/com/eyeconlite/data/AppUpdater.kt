@@ -38,13 +38,40 @@ sealed interface UpdateState {
 object AppUpdater {
     const val REPO = "bmjubairdadu/Eyecon-Lite"
     private const val API_LATEST = "https://api.github.com/repos/$REPO/releases/latest"
+    private const val WEB_LATEST = "https://github.com/$REPO/releases/latest"
+    private const val WEB_ATOM = "https://github.com/$REPO/releases.atom"
+    private const val APK_NAME = "Eyecon.Lite.apk"
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    private val webClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
+
+    private val noRedirectClient: OkHttpClient by lazy {
+        webClient.newBuilder().followRedirects(false).build()
+    }
+
     suspend fun checkLatest(): UpdateInfo = withContext(Dispatchers.IO) {
+        val apiError = try {
+            return@withContext checkViaApi()
+        } catch (e: Exception) {
+            e
+        }
+        // API failed (rate limit or offline) — use the public website instead. No token needed.
+        try {
+            checkViaWeb()
+        } catch (_: Exception) {
+            if (apiError is UpdateCheckException) throw apiError
+            throw UpdateCheckException("Couldn't check right now. Try again later.")
+        }
+    }
+
+    private fun checkViaApi(): UpdateInfo {
         val req = Request.Builder()
             .url(API_LATEST)
             .header("Accept", "application/vnd.github+json")
@@ -73,8 +100,64 @@ object AppUpdater {
                 }
             }
             if (apkUrl.isEmpty()) throw IllegalStateException("No APK in latest release")
-            UpdateInfo(tag, tag.trimStart('v', 'V'), notes, apkUrl, apkSize)
+            return UpdateInfo(tag, tag.trimStart('v', 'V'), notes, apkUrl, apkSize)
         }
+    }
+
+    /** Website fallback when the API is rate-limited or offline: no token needed. */
+    private fun checkViaWeb(): UpdateInfo {
+        val redirectTag = latestTagFromRedirect()
+        val feed = if (redirectTag != null) null else atomFeed()
+        val tag = redirectTag ?: feed?.let(::tagFromFeed)
+            ?: throw UpdateCheckException("Couldn't check right now. Try again later.")
+        val notes = feed?.let(::notesFromFeed).orEmpty()
+        val apkUrl = "https://github.com/$REPO/releases/download/$tag/$APK_NAME"
+        return UpdateInfo(tag, tag.trimStart('v', 'V'), notes, apkUrl, 0L)
+    }
+
+    private fun latestTagFromRedirect(): String? {
+        return try {
+            val req = Request.Builder()
+                .url(WEB_LATEST)
+                .header("User-Agent", "EyeconLite-Updater")
+                .build()
+            noRedirectClient.newCall(req).execute().use { resp ->
+                val loc = resp.header("Location").orEmpty()
+                Regex("/releases/tag/([^/?#]+)").find(loc)
+                    ?.groupValues?.getOrNull(1)?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun atomFeed(): String? {
+        return try {
+            val req = Request.Builder()
+                .url(WEB_ATOM)
+                .header("User-Agent", "EyeconLite-Updater")
+                .build()
+            webClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) null else resp.body?.string()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun tagFromFeed(feed: String): String? =
+        Regex("/releases/tag/([^\"<>\\s]+)").find(feed)
+            ?.groupValues?.getOrNull(1)?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
+    private fun notesFromFeed(feed: String): String {
+        val content = Regex("<content[^>]*>(.*?)</content>", RegexOption.DOT_MATCHES_ALL)
+            .find(feed)?.groupValues?.getOrNull(1) ?: return ""
+        return content
+            .replace(Regex("<[^>]+>"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim().take(600)
     }
 
     suspend fun fetchInstallEstimate(): Long? = withContext(Dispatchers.IO) {

@@ -1,8 +1,11 @@
 package com.eyeconlite.data
 
+import android.accounts.AccountManager
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract
 import android.telephony.TelephonyManager
@@ -20,6 +23,14 @@ data class SavedContactMeta(
     val sim: String,
     val email: String,
     val savedAt: Long
+)
+
+data class SaveDestination(
+    val accountType: String?,
+    val accountName: String?,
+    val label: String,
+    val detail: String,
+    val sim: Boolean = false
 )
 
 object ContactsSync {
@@ -49,6 +60,84 @@ object ContactsSync {
             email = email?.trim().orEmpty().ifBlank { "Not provided" },
             savedAt = System.currentTimeMillis()
         )
+    }
+
+    fun simName(context: Context): String {
+        return runCatching {
+            val tm = context.getSystemService(TelephonyManager::class.java)
+            listOfNotNull(
+                tm?.simOperatorName,
+                tm?.networkOperatorName
+            ).firstOrNull { it.isNotBlank() }
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "SIM card"
+    }
+
+    /** All places the contact can be saved: phone, synced accounts (Google/mail), SIM. */
+    fun listSaveDestinations(context: Context): List<SaveDestination> {
+        val out = ArrayList<SaveDestination>()
+        val device = "${Build.MANUFACTURER ?: ""} ${Build.MODEL ?: ""}".trim()
+        out.add(
+            SaveDestination(
+                accountType = null,
+                accountName = null,
+                label = "Phone (This device)",
+                detail = device.ifBlank { "Local contacts" }
+            )
+        )
+        val seen = HashSet<String>()
+        // Existing contact accounts — needs only READ_CONTACTS.
+        runCatching {
+            context.contentResolver.query(
+                ContactsContract.RawContacts.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.RawContacts.ACCOUNT_TYPE,
+                    ContactsContract.RawContacts.ACCOUNT_NAME
+                ),
+                null, null, null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val type = c.getString(0)
+                    val name = c.getString(1)
+                    if (type.isNullOrBlank() || name.isNullOrBlank()) continue
+                    val key = "$type|$name"
+                    if (!seen.add(key)) continue
+                    out.add(
+                        SaveDestination(
+                            accountType = type,
+                            accountName = name,
+                            label = if (type.contains("google", ignoreCase = true)) "Google" else name,
+                            detail = name
+                        )
+                    )
+                }
+            }
+        }
+        // Google accounts with no contacts yet — best effort, may need GET_ACCOUNTS.
+        runCatching {
+            val am = AccountManager.get(context)
+            for (a in am.getAccountsByType("com.google")) {
+                val key = "com.google|${a.name}"
+                if (!seen.add(key)) continue
+                out.add(
+                    SaveDestination(
+                        accountType = a.type,
+                        accountName = a.name,
+                        label = "Google",
+                        detail = a.name
+                    )
+                )
+            }
+        }
+        out.add(
+            SaveDestination(
+                accountType = "sim",
+                accountName = "sim",
+                label = "SIM card",
+                detail = "${simName(context)} • name + number only",
+                sim = true
+            )
+        )
+        return out
     }
 
     fun formatSavedSummary(context: Context, email: String? = null): String {
@@ -178,15 +267,17 @@ object ContactsSync {
         name: String,
         phone: String,
         photoBytes: ByteArray?,
-        email: String? = null
+        email: String? = null,
+        destination: SaveDestination? = null
     ): Boolean {
+        if (destination?.sim == true) return saveToSim(context, name, phone)
         return try {
             val cleanEmail = email?.trim().orEmpty()
             val ops = ArrayList<ContentProviderOperation>()
             ops.add(
                 ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
-                    .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null as String?)
-                    .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null as String?)
+                    .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, destination?.accountType)
+                    .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, destination?.accountName)
                     .build()
             )
             ops.add(
@@ -246,6 +337,28 @@ object ContactsSync {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** SIM cards only store name + number, so email/photo are skipped there. */
+    private fun saveToSim(context: Context, name: String, phone: String): Boolean {
+        val cleanName = name.trim().take(40)
+        val cleanPhone = phone.filter { it.isDigit() || it == '+' }.trim()
+        if (cleanName.isEmpty() || cleanPhone.filter { it.isDigit() }.length < 7) return false
+        val uris = listOf("content://icc/adn", "content://sim/adn")
+        for (base in uris) {
+            try {
+                val values = ContentValues().apply {
+                    put("tag", cleanName)
+                    put("number", cleanPhone)
+                    put("name", cleanName)
+                }
+                val inserted = context.contentResolver.insert(Uri.parse(base), values)
+                if (inserted != null) return true
+            } catch (_: Exception) {
+                continue
+            }
+        }
+        return false
     }
 
     fun isDone(context: Context): Boolean =
