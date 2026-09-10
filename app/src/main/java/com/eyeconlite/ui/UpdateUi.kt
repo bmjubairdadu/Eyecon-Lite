@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -30,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -399,19 +400,56 @@ fun UpdateDialog() {
     }
     val file: File? = (state as? UpdateState.Ready)?.file
     val progress: Float? = (state as? UpdateState.Downloading)?.progress
+    val downloading = progress != null
 
     AlertDialog(
-        onDismissRequest = { UpdateStore.showDialog = false },
+        onDismissRequest = { if (!downloading) UpdateStore.showDialog = false },
         containerColor = Color(0xFF10294D),
+        shape = RoundedCornerShape(24.dp),
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFFD4AF37), Color(0xFF8A6D1B))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (downloading) {
+                    CircularProgressIndicator(
+                        color = Color(0xFF10294D),
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(30.dp)
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.SystemUpdate,
+                        contentDescription = null,
+                        tint = Color(0xFF10294D),
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        },
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.SystemUpdate, null, tint = Color(0xFFF5D67B))
-                Spacer(Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     if (info != null) "Update to v${info.versionName}" else "App Update",
                     color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 19.sp
                 )
+                if (info != null && info.apkSize > 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Size: ${info.apkSize / 1048576} MB • Free update",
+                        color = Color(0xFFF5D67B),
+                        fontSize = 12.sp
+                    )
+                }
             }
         },
         text = {
@@ -422,78 +460,128 @@ fun UpdateDialog() {
             ) {
                 Text(
                     "A new version of Eyecon Lite is available. " +
-                        "Download it and install to upgrade automatically  -  no need to uninstall.",
+                        "Download it and install to upgrade automatically — no need to uninstall.",
                     color = Color(0xFF9DB9D6),
                     fontSize = 13.sp
                 )
                 if (!info?.notes.isNullOrBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        info!!.notes.take(400),
-                        color = Color.White,
-                        fontSize = 13.sp
-                    )
+                    Spacer(Modifier.height(10.dp))
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White.copy(alpha = 0.07f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            info!!.notes.take(400),
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                 }
                 if (progress != null) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
                     LinearProgressIndicator(
                         progress = { progress },
                         color = Color(0xFFF5D67B),
                         trackColor = Color.White.copy(alpha = 0.15f),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
                     )
                     Text(
                         "Downloading... ${(progress * 100).toInt()}%",
-                        color = Color.Gray,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 4.dp)
+                        color = Color(0xFFF5D67B),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 6.dp)
                     )
                 }
             }
         },
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { UpdateStore.showDialog = false }) {
-                    Text("Later", color = Color.Gray)
-                }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 when {
                     file != null && info != null -> {
                         Button(
                             onClick = { UpdateStore.install(context, file) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37))
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37)),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
                         ) {
                             Icon(Icons.Filled.Download, null, tint = Color(0xFF3A2E05))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Install Now", color = Color(0xFF3A2E05), fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Install Now",
+                                color = Color(0xFF3A2E05),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
+                        TextButton(
+                            onClick = { UpdateStore.showDialog = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Later", color = Color.Gray, fontSize = 14.sp)
                         }
                     }
                     info != null -> {
                         Button(
                             onClick = { UpdateStore.download(context, scope, info) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37))
+                            enabled = !downloading,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37)),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
                         ) {
                             Icon(Icons.Filled.Download, null, tint = Color(0xFF3A2E05))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Download", color = Color(0xFF3A2E05), fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (downloading) "Downloading…" else "Download Update",
+                                color = Color(0xFF3A2E05),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { UpdateStore.showDialog = false },
+                            enabled = !downloading,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                        ) {
+                            Text("Later", color = Color(0xFFF5D67B), fontSize = 14.sp)
                         }
                     }
                     else -> {
-                        TextButton(onClick = { UpdateStore.check(context, scope) }) {
-                            Icon(Icons.Filled.Refresh, null, tint = Color(0xFFF5D67B))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Check Again", color = Color(0xFFF5D67B))
+                        Button(
+                            onClick = { UpdateStore.check(context, scope) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37)),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                        ) {
+                            Icon(Icons.Filled.Refresh, null, tint = Color(0xFF3A2E05))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Check Again",
+                                color = Color(0xFF3A2E05),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
                         }
                     }
-                }
-            }
-        },
-        dismissButton = {
-            if (file == null) {
-                TextButton(onClick = { UpdateStore.showDialog = false }) {
-                    Icon(Icons.Filled.Close, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
                 }
             }
         }

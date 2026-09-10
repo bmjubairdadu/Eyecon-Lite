@@ -2,6 +2,7 @@ package com.eyeconlite.data
 
 import android.Manifest
 import android.accounts.AccountManager
+import android.app.Activity
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
 import android.content.ContentValues
@@ -121,7 +122,26 @@ object ContactsSync {
         else -> "Mail account"
     }
 
+    /** Permissions needed so every SIM slot + Gmail account shows in the picker. */
+    val SAVE_DEST_PERMISSIONS: Array<String> = arrayOf(
+        Manifest.permission.READ_CONTACTS,
+        Manifest.permission.WRITE_CONTACTS,
+        Manifest.permission.READ_PHONE_STATE,
+        Manifest.permission.READ_PHONE_NUMBERS,
+        Manifest.permission.GET_ACCOUNTS
+    )
+
     /** (type, name) for every mail-capable account: existing contact accounts + device accounts. */
+    fun mailAccountsPublic(context: Context): List<Pair<String, String>> = mailAccounts(context)
+
+    /** True when a permission rationale popup should be shown before requesting. */
+    fun shouldShowDestRationale(context: Context): Boolean {
+        val activity = context as? Activity ?: return false
+        return SAVE_DEST_PERMISSIONS.any {
+            androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
+        }
+    }
+
     private fun mailAccounts(context: Context): List<Pair<String, String>> {
         val out = ArrayList<Pair<String, String>>()
         // Accounts already holding contacts — needs only READ_CONTACTS.
@@ -148,6 +168,17 @@ object ContactsSync {
             val am = AccountManager.get(context)
             for (a in am.accounts) {
                 if (a.name.contains("@") || isMailType(a.type)) out.add(a.type to a.name)
+            }
+        }
+        // Explicit per-type query — some OEMs hide Google accounts from getAccounts().
+        runCatching {
+            val am = AccountManager.get(context)
+            for (t in listOf("com.google", "com.google.android.gms", "com.google.android.apps")) {
+                runCatching {
+                    for (a in am.getAccountsByType(t)) {
+                        if (a.name.isNotBlank()) out.add(a.type to a.name)
+                    }
+                }
             }
         }
         // Contact groups expose Google accounts with READ_CONTACTS only.

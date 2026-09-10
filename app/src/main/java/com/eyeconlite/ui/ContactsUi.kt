@@ -2,7 +2,9 @@ package com.eyeconlite.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,8 +27,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SimCard
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,6 +45,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -57,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -100,6 +108,155 @@ fun hasExtraDestPermissions(context: Context): Boolean {
         Manifest.permission.GET_ACCOUNTS
     ) == PackageManager.PERMISSION_GRANTED
     return phoneOk && acctOk
+}
+
+private fun missingDestPermissions(context: Context): Array<String> {
+    return ContactsSync.SAVE_DEST_PERMISSIONS.filter {
+        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+    }.toTypedArray()
+}
+
+private fun destIconFor(kind: String, accountType: String?): ImageVector = when {
+    kind == "sim" -> Icons.Filled.SimCard
+    kind == "phone" -> Icons.Filled.Smartphone
+    (accountType ?: "").contains("google", ignoreCase = true) -> Icons.Filled.Email
+    kind == "account" -> Icons.Filled.Email
+    else -> Icons.Filled.Contacts
+}
+
+/** Icon + text shown in the permission-explainer popup before requesting. */
+private data class DestPermInfo(
+    val icon: ImageVector,
+    val title: String,
+    val text: String
+)
+
+private fun destPermInfos(): List<DestPermInfo> = listOf(
+    DestPermInfo(
+        Icons.Filled.Contacts,
+        "Contacts",
+        "Read your existing Google contacts and save the new number."
+    ),
+    DestPermInfo(
+        Icons.Filled.SimCard,
+        "Phone state (SIM)",
+        "Show SIM 1 and SIM 2 separately so you can pick one."
+    ),
+    DestPermInfo(
+        Icons.Filled.Smartphone,
+        "Phone numbers",
+        "Show each SIM's carrier name and number."
+    ),
+    DestPermInfo(
+        Icons.Filled.Email,
+        "Accounts (Gmail)",
+        "List every logged-in Gmail account as a save location."
+    )
+)
+
+@Composable
+private fun PermissionExplainerDialog(
+    onAllow: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF10294D),
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFFD4AF37), Color(0xFF8A6D1B))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Contacts,
+                    contentDescription = null,
+                    tint = Color(0xFF10294D),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        },
+        title = {
+            Text(
+                "Allow access to save anywhere",
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Eyecon Lite needs these permissions to show every save location. " +
+                        "Nothing is uploaded — everything stays on your phone.",
+                    color = Color(0xFF9DB9D6),
+                    fontSize = 13.sp
+                )
+                destPermInfos().forEach { info ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.10f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                info.icon,
+                                contentDescription = null,
+                                tint = Color(0xFFF5D67B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                info.title,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                info.text,
+                                color = Color(0xFF9DB9D6),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onAllow,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text("Allow", color = Color(0xFF3A2E05), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Not now", color = Color.Gray)
+            }
+        }
+    )
 }
 
 @Composable
@@ -377,7 +534,21 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
         mutableStateOf(ContactsSync.listSaveDestinations(context))
     }
     var selected by remember { mutableStateOf(destinations.first()) }
+    var showPermExplainer by remember { mutableStateOf(false) }
+    var pendingSaveAfterPerms by remember { mutableStateOf(false) }
     val bmp = remember(info) { EyeconApi.decodePhoto(info.photoBytes) }
+
+    fun refreshDestinations() {
+        scope.launch {
+            val fresh = withContext(Dispatchers.IO) {
+                ContactsSync.listSaveDestinations(context)
+            }
+            destinations = fresh
+            if (fresh.none { it.key() == selected.key() }) {
+                selected = fresh.first()
+            }
+        }
+    }
 
     fun doSave() {
         if (name.isBlank()) {
@@ -409,10 +580,15 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) {
+    ) { grants ->
+        refreshDestinations()
         if (hasContactPermissions(context)) {
-            doSave()
+            if (pendingSaveAfterPerms) {
+                pendingSaveAfterPerms = false
+                doSave()
+            }
         } else {
+            pendingSaveAfterPerms = false
             Toast.makeText(context, "Contacts permission needed", Toast.LENGTH_LONG).show()
         }
     }
@@ -420,33 +596,14 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
     val destPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        scope.launch {
-            val fresh = withContext(Dispatchers.IO) {
-                ContactsSync.listSaveDestinations(context)
-            }
-            destinations = fresh
-            if (fresh.none { it.key() == selected.key() }) {
-                selected = fresh.first()
-            }
-        }
+        refreshDestinations()
     }
 
     LaunchedEffect(Unit) {
-        destinations = withContext(Dispatchers.IO) {
-            ContactsSync.listSaveDestinations(context)
-        }
-        if (destinations.none { it.key() == selected.key() }) {
-            selected = destinations.first()
-        }
-        // Ask for SIM/account visibility once; reload so SIM 2 + Gmail appear.
-        if (!hasExtraDestPermissions(context)) {
-            destPermLauncher.launch(
-                arrayOf(
-                    Manifest.permission.READ_PHONE_STATE,
-                    Manifest.permission.READ_PHONE_NUMBERS,
-                    Manifest.permission.GET_ACCOUNTS
-                )
-            )
+        refreshDestinations()
+        // First open: explain, then ask — so SIM 2 + Gmail can appear.
+        if (missingDestPermissions(context).isNotEmpty()) {
+            showPermExplainer = true
         }
     }
 
@@ -571,13 +728,22 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
                         destinations.forEach { dest ->
                             DropdownMenuItem(
                                 text = {
-                                    Column {
-                                        Text(dest.label)
-                                        Text(
-                                            dest.detail,
-                                            fontSize = 12.sp,
-                                            color = Color.Gray
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            destIconFor(dest.kind, dest.accountType),
+                                            contentDescription = null,
+                                            tint = Color(0xFFF5D67B),
+                                            modifier = Modifier.size(22.dp)
                                         )
+                                        Spacer(Modifier.width(10.dp))
+                                        Column {
+                                            Text(dest.label)
+                                            Text(
+                                                dest.detail,
+                                                fontSize = 12.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
                                     }
                                 },
                                 onClick = {
@@ -585,6 +751,59 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
                                     expanded = false
                                 }
                             )
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Filled.Add,
+                                        contentDescription = null,
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Column {
+                                        Text("Add Google account")
+                                        Text(
+                                            "Open system settings",
+                                            fontSize = 12.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                expanded = false
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_ADD_ACCOUNT).apply {
+                                            putExtra(Settings.EXTRA_ACCOUNT_TYPES, arrayOf("com.google"))
+                                        }
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+                if (destinations.none { it.kind == "account" }) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Email,
+                            contentDescription = null,
+                            tint = Color(0xFFF5D67B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "No Gmail found — tap \"Add Google account\" in the list, " +
+                                "then reopen this dialog.",
+                            color = Color(0xFF9DB9D6),
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { refreshDestinations() }) {
+                            Text("Refresh", color = Color(0xFFF5D67B), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -604,12 +823,8 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
                     if (hasContactPermissions(context)) {
                         doSave()
                     } else {
-                        permLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.READ_CONTACTS,
-                                Manifest.permission.WRITE_CONTACTS
-                            )
-                        )
+                        pendingSaveAfterPerms = true
+                        showPermExplainer = true
                     }
                 },
                 enabled = !saving,
@@ -635,4 +850,33 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
             }
         }
     )
+    if (showPermExplainer) {
+        PermissionExplainerDialog(
+            onAllow = {
+                showPermExplainer = false
+                val missing = missingDestPermissions(context)
+                if (missing.isEmpty()) {
+                    refreshDestinations()
+                    if (pendingSaveAfterPerms) {
+                        pendingSaveAfterPerms = false
+                        if (hasContactPermissions(context)) doSave()
+                    }
+                } else {
+                    val saveOnly = missing.filter {
+                        it == Manifest.permission.READ_CONTACTS ||
+                            it == Manifest.permission.WRITE_CONTACTS
+                    }.toTypedArray()
+                    if (pendingSaveAfterPerms && saveOnly.isNotEmpty() && saveOnly.size == missing.size) {
+                        permLauncher.launch(saveOnly)
+                    } else {
+                        destPermLauncher.launch(missing)
+                    }
+                }
+            },
+            onDismiss = {
+                showPermExplainer = false
+                pendingSaveAfterPerms = false
+            }
+        )
+    }
 }
