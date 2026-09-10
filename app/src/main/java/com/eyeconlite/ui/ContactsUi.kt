@@ -358,7 +358,6 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
     var phone by remember {
         mutableStateOf(info.normalized?.nationalFormat ?: info.phone)
     }
-    var email by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
@@ -372,7 +371,7 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
         destinations = withContext(Dispatchers.IO) {
             ContactsSync.listSaveDestinations(context)
         }
-        if (destinations.none { it.label == selected.label && it.detail == selected.detail }) {
+        if (destinations.none { it.key() == selected.key() }) {
             selected = destinations.first()
         }
     }
@@ -391,7 +390,6 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
                     name.trim(),
                     phone.trim(),
                     info.photoBytes,
-                    email = email.trim(),
                     destination = dest
                 )
             }
@@ -399,7 +397,7 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
             Toast.makeText(
                 context,
                 if (ok) "Saved to ${dest.label}" +
-                    if (dest.sim) " • name + number only" else "" else "Save failed",
+                    if (dest.isSim) " • name + number only" else "" else "Save failed",
                 Toast.LENGTH_LONG
             ).show()
             if (ok) onDismiss()
@@ -506,22 +504,6 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email (optional)") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color(0xFFF5D67B),
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
-                        cursorColor = Color(0xFFF5D67B)
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
                 ExposedDropdownMenuBox(
                     expanded = expanded,
                     onExpandedChange = { expanded = !expanded }
@@ -570,10 +552,10 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
                         }
                     }
                 }
-                if (selected.sim) {
+                if (selected.isSim) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "SIM stores name + number only — email and photo are skipped.",
+                        "SIM stores name + number only — photo is skipped.",
                         color = Color(0xFF9DB9D6),
                         fontSize = 12.sp
                     )

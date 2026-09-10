@@ -1,14 +1,18 @@
 package com.eyeconlite.data
 
+import android.Manifest
 import android.accounts.AccountManager
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract
+import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
+import androidx.core.content.ContextCompat
 
 data class DeviceContact(
     val id: Long,
@@ -18,20 +22,17 @@ data class DeviceContact(
     val hasPhoto: Boolean
 )
 
-data class SavedContactMeta(
-    val device: String,
-    val sim: String,
-    val email: String,
-    val savedAt: Long
-)
-
 data class SaveDestination(
+    val kind: String, // phone | account | sim
     val accountType: String?,
     val accountName: String?,
+    val simSlot: Int = -1,
     val label: String,
-    val detail: String,
-    val sim: Boolean = false
-)
+    val detail: String
+) {
+    val isSim: Boolean get() = kind == "sim"
+    fun key(): String = "$kind|${accountType.orEmpty()}|${accountName.orEmpty()}|$simSlot"
+}
 
 object ContactsSync {
 
@@ -45,23 +46,6 @@ object ContactsSync {
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun buildSavedMeta(context: Context, email: String? = null): SavedContactMeta {
-        val device = "${Build.MANUFACTURER ?: "Unknown"} ${Build.MODEL ?: "Device"}".trim()
-        val sim = runCatching {
-            val tm = context.getSystemService(TelephonyManager::class.java)
-            listOfNotNull(
-                tm?.simOperatorName,
-                tm?.networkOperatorName
-            ).firstOrNull { it.isNotBlank() }
-        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Unavailable"
-        return SavedContactMeta(
-            device = device.ifBlank { "Unknown device" },
-            sim = sim.ifBlank { "Unavailable" },
-            email = email?.trim().orEmpty().ifBlank { "Not provided" },
-            savedAt = System.currentTimeMillis()
-        )
-    }
-
     fun simName(context: Context): String {
         return runCatching {
             val tm = context.getSystemService(TelephonyManager::class.java)
@@ -72,20 +56,72 @@ object ContactsSync {
         }.getOrNull()?.takeIf { it.isNotBlank() } ?: "SIM card"
     }
 
-    /** All places the contact can be saved: phone, synced accounts (Google/mail), SIM. */
+    /** Save locations: phone, every logged-in mail account, every SIM slot. */
     fun listSaveDestinations(context: Context): List<SaveDestination> {
         val out = ArrayList<SaveDestination>()
         val device = "${Build.MANUFACTURER ?: ""} ${Build.MODEL ?: ""}".trim()
         out.add(
             SaveDestination(
+                kind = "phone",
                 accountType = null,
                 accountName = null,
                 label = "Phone (This device)",
                 detail = device.ifBlank { "Local contacts" }
             )
         )
-        val seen = HashSet<String>()
-        // Existing contact accounts — needs only READ_CONTACTS.
+        val seen = HashSet<String>().also { it.add(out.first().key()) }
+        // Every mail-type account on the device (Google + others), one row each.
+        for (a in mailAccounts(context)) {
+            val d = SaveDestination(
+                kind = "account",
+                accountType = a.first,
+                accountName = a.second,
+                label = a.second,
+                detail = accountDetailLabel(a.first)
+            )
+            if (seen.add(d.key())) out.add(d)
+        }
+        // Every SIM slot separately: SIM 1, SIM 2, ...
+        val sims = simSlots(context)
+        if (sims.isEmpty()) {
+            val d = SaveDestination(
+                kind = "sim",
+                accountType = "sim",
+                accountName = "sim",
+                simSlot = 0,
+                label = "SIM card",
+                detail = "${simName(context)} • name + number only"
+            )
+            if (seen.add(d.key())) out.add(d)
+        } else {
+            for (s in sims) {
+                val d = SaveDestination(
+                    kind = "sim",
+                    accountType = "sim",
+                    accountName = "sim${s.slot + 1}",
+                    simSlot = s.slot,
+                    label = s.label,
+                    detail = "${s.detail} • name + number only"
+                )
+                if (seen.add(d.key())) out.add(d)
+            }
+        }
+        return out
+    }
+
+    private fun accountDetailLabel(type: String): String = when {
+        type.contains("google", ignoreCase = true) -> "Google account"
+        type.contains("exchange", ignoreCase = true) -> "Exchange account"
+        type.contains("outlook", ignoreCase = true) ||
+            type.contains("hotmail", ignoreCase = true) -> "Outlook account"
+        type.contains("yahoo", ignoreCase = true) -> "Yahoo account"
+        else -> "Mail account"
+    }
+
+    /** (type, name) for every mail-capable account: existing contact accounts + device accounts. */
+    private fun mailAccounts(context: Context): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
+        // Accounts already holding contacts — needs only READ_CONTACTS.
         runCatching {
             context.contentResolver.query(
                 ContactsContract.RawContacts.CONTENT_URI,
@@ -96,53 +132,59 @@ object ContactsSync {
                 null, null, null
             )?.use { c ->
                 while (c.moveToNext()) {
-                    val type = c.getString(0)
-                    val name = c.getString(1)
-                    if (type.isNullOrBlank() || name.isNullOrBlank()) continue
-                    val key = "$type|$name"
-                    if (!seen.add(key)) continue
-                    out.add(
-                        SaveDestination(
-                            accountType = type,
-                            accountName = name,
-                            label = if (type.contains("google", ignoreCase = true)) "Google" else name,
-                            detail = name
-                        )
-                    )
+                    val type = c.getString(0).orEmpty()
+                    val name = c.getString(1).orEmpty()
+                    if (type.isBlank() || name.isBlank()) continue
+                    if (!name.contains("@") && !isMailType(type)) continue
+                    out.add(type to name)
                 }
             }
         }
-        // Google accounts with no contacts yet — best effort, may need GET_ACCOUNTS.
+        // Device accounts even with no contacts yet — best effort, may need GET_ACCOUNTS.
         runCatching {
             val am = AccountManager.get(context)
-            for (a in am.getAccountsByType("com.google")) {
-                val key = "com.google|${a.name}"
-                if (!seen.add(key)) continue
+            for (a in am.accounts) {
+                if (a.name.contains("@") || isMailType(a.type)) out.add(a.type to a.name)
+            }
+        }
+        return out.distinct()
+    }
+
+    private fun isMailType(type: String): Boolean {
+        val t = type.lowercase()
+        return t.contains("google") || t.contains("exchange") || t.contains("mail") ||
+            t.contains("outlook") || t.contains("hotmail") || t.contains("yahoo")
+    }
+
+    private data class SimSlot(val slot: Int, val label: String, val detail: String)
+
+    /** One entry per active SIM: SIM 1 (Grameenphone), SIM 2 (Robi), ... */
+    private fun simSlots(context: Context): List<SimSlot> {
+        val out = ArrayList<SimSlot>()
+        runCatching {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return@runCatching
+            val sm = context.getSystemService(SubscriptionManager::class.java) ?: return@runCatching
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) !=
+                PackageManager.PERMISSION_GRANTED
+            ) return@runCatching
+            val subs = sm.activeSubscriptionInfoList ?: return@runCatching
+            for (s in subs) {
+                val slot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) s.simSlotIndex else s.simSlotIndex
+                val carrier = listOfNotNull(
+                    s.carrierName?.toString()?.takeIf { it.isNotBlank() },
+                    s.displayName?.toString()?.takeIf { it.isNotBlank() }
+                ).firstOrNull() ?: "SIM ${slot + 1}"
+                val num = s.number?.takeIf { it.isNotBlank() }
                 out.add(
-                    SaveDestination(
-                        accountType = a.type,
-                        accountName = a.name,
-                        label = "Google",
-                        detail = a.name
+                    SimSlot(
+                        slot = slot,
+                        label = "SIM ${slot + 1} ($carrier)",
+                        detail = if (num != null) "$carrier • $num" else carrier
                     )
                 )
             }
         }
-        out.add(
-            SaveDestination(
-                accountType = "sim",
-                accountName = "sim",
-                label = "SIM card",
-                detail = "${simName(context)} • name + number only",
-                sim = true
-            )
-        )
-        return out
-    }
-
-    fun formatSavedSummary(context: Context, email: String? = null): String {
-        val meta = buildSavedMeta(context, email)
-        return "Device: ${meta.device} • SIM: ${meta.sim} • Email: ${meta.email}"
+        return out.sortedBy { it.slot }.distinctBy { it.slot }
     }
 
     fun readContacts(context: Context): List<DeviceContact> {
@@ -267,12 +309,10 @@ object ContactsSync {
         name: String,
         phone: String,
         photoBytes: ByteArray?,
-        email: String? = null,
         destination: SaveDestination? = null
     ): Boolean {
-        if (destination?.sim == true) return saveToSim(context, name, phone)
+        if (destination?.isSim == true) return saveToSim(context, name, phone, destination.simSlot)
         return try {
-            val cleanEmail = email?.trim().orEmpty()
             val ops = ArrayList<ContentProviderOperation>()
             ops.add(
                 ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
@@ -304,22 +344,6 @@ object ContactsSync {
                     )
                     .build()
             )
-            if (cleanEmail.isNotEmpty()) {
-                ops.add(
-                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                        .withValue(
-                            ContactsContract.Data.MIMETYPE,
-                            ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE
-                        )
-                        .withValue(ContactsContract.CommonDataKinds.Email.ADDRESS, cleanEmail)
-                        .withValue(
-                            ContactsContract.CommonDataKinds.Email.TYPE,
-                            ContactsContract.CommonDataKinds.Email.TYPE_HOME
-                        )
-                        .build()
-                )
-            }
             if (photoBytes != null && photoBytes.isNotEmpty()) {
                 ops.add(
                     ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
@@ -339,13 +363,21 @@ object ContactsSync {
         }
     }
 
-    /** SIM cards only store name + number, so email/photo are skipped there. */
-    private fun saveToSim(context: Context, name: String, phone: String): Boolean {
+    /** SIM cards only store name + number, so photo is skipped there. */
+    private fun saveToSim(context: Context, name: String, phone: String, slot: Int): Boolean {
         val cleanName = name.trim().take(40)
         val cleanPhone = phone.filter { it.isDigit() || it == '+' }.trim()
         if (cleanName.isEmpty() || cleanPhone.filter { it.isDigit() }.length < 7) return false
-        val uris = listOf("content://icc/adn", "content://sim/adn")
-        for (base in uris) {
+        // Try the SIM-slot-specific URI first, then the generic ones.
+        val bases = buildList {
+            if (slot >= 0) {
+                add("content://icc/adn/subId/$slot")
+                add("content://icc/adn/sim$slot")
+            }
+            add("content://icc/adn")
+            add("content://sim/adn")
+        }
+        for (base in bases) {
             try {
                 val values = ContentValues().apply {
                     put("tag", cleanName)
