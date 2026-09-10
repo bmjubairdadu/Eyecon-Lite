@@ -90,6 +90,18 @@ fun hasContactPermissions(context: Context): Boolean {
         ) == PackageManager.PERMISSION_GRANTED
 }
 
+fun hasExtraDestPermissions(context: Context): Boolean {
+    val phoneOk = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.READ_PHONE_STATE
+    ) == PackageManager.PERMISSION_GRANTED
+    val acctOk = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.GET_ACCOUNTS
+    ) == PackageManager.PERMISSION_GRANTED
+    return phoneOk && acctOk
+}
+
 @Composable
 fun ContactsSyncCard() {
     val context = LocalContext.current
@@ -367,15 +379,6 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
     var selected by remember { mutableStateOf(destinations.first()) }
     val bmp = remember(info) { EyeconApi.decodePhoto(info.photoBytes) }
 
-    LaunchedEffect(Unit) {
-        destinations = withContext(Dispatchers.IO) {
-            ContactsSync.listSaveDestinations(context)
-        }
-        if (destinations.none { it.key() == selected.key() }) {
-            selected = destinations.first()
-        }
-    }
-
     fun doSave() {
         if (name.isBlank()) {
             nameError = true
@@ -411,6 +414,39 @@ fun SaveContactDialog(info: CallerInfo, onDismiss: () -> Unit) {
             doSave()
         } else {
             Toast.makeText(context, "Contacts permission needed", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val destPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        scope.launch {
+            val fresh = withContext(Dispatchers.IO) {
+                ContactsSync.listSaveDestinations(context)
+            }
+            destinations = fresh
+            if (fresh.none { it.key() == selected.key() }) {
+                selected = fresh.first()
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        destinations = withContext(Dispatchers.IO) {
+            ContactsSync.listSaveDestinations(context)
+        }
+        if (destinations.none { it.key() == selected.key() }) {
+            selected = destinations.first()
+        }
+        // Ask for SIM/account visibility once; reload so SIM 2 + Gmail appear.
+        if (!hasExtraDestPermissions(context)) {
+            destPermLauncher.launch(
+                arrayOf(
+                    Manifest.permission.READ_PHONE_STATE,
+                    Manifest.permission.READ_PHONE_NUMBERS,
+                    Manifest.permission.GET_ACCOUNTS
+                )
+            )
         }
     }
 

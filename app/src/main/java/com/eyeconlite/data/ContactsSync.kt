@@ -27,11 +27,12 @@ data class SaveDestination(
     val accountType: String?,
     val accountName: String?,
     val simSlot: Int = -1,
+    val simSubId: Int = -1,
     val label: String,
     val detail: String
 ) {
     val isSim: Boolean get() = kind == "sim"
-    fun key(): String = "$kind|${accountType.orEmpty()}|${accountName.orEmpty()}|$simSlot"
+    fun key(): String = "$kind|${accountType.orEmpty()}|${accountName.orEmpty()}|$simSlot|$simSubId"
 }
 
 object ContactsSync {
@@ -89,19 +90,21 @@ object ContactsSync {
                 accountType = "sim",
                 accountName = "sim",
                 simSlot = 0,
+                simSubId = 0,
                 label = "SIM card",
                 detail = "${simName(context)} • name + number only"
             )
             if (seen.add(d.key())) out.add(d)
         } else {
-            for (s in sims) {
+            for (sv in sims) {
                 val d = SaveDestination(
                     kind = "sim",
                     accountType = "sim",
-                    accountName = "sim${s.slot + 1}",
-                    simSlot = s.slot,
-                    label = s.label,
-                    detail = "${s.detail} • name + number only"
+                    accountName = "sim${sv.slot + 1}",
+                    simSlot = sv.slot,
+                    simSubId = sv.subId,
+                    label = sv.label,
+                    detail = "${sv.detail} • name + number only"
                 )
                 if (seen.add(d.key())) out.add(d)
             }
@@ -147,6 +150,25 @@ object ContactsSync {
                 if (a.name.contains("@") || isMailType(a.type)) out.add(a.type to a.name)
             }
         }
+        // Contact groups expose Google accounts with READ_CONTACTS only.
+        runCatching {
+            context.contentResolver.query(
+                ContactsContract.Groups.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.Groups.ACCOUNT_TYPE,
+                    ContactsContract.Groups.ACCOUNT_NAME
+                ),
+                null, null, null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val type = c.getString(0).orEmpty()
+                    val name = c.getString(1).orEmpty()
+                    if (type.isBlank() || name.isBlank()) continue
+                    if (!name.contains("@") && !isMailType(type)) continue
+                    out.add(type to name)
+                }
+            }
+        }
         return out.distinct()
     }
 
@@ -156,11 +178,12 @@ object ContactsSync {
             t.contains("outlook") || t.contains("hotmail") || t.contains("yahoo")
     }
 
-    private data class SimSlot(val slot: Int, val label: String, val detail: String)
+    private data class SimSlot(val slot: Int, val subId: Int, val label: String, val detail: String)
 
     /** One entry per active SIM: SIM 1 (Grameenphone), SIM 2 (Robi), ... */
     private fun simSlots(context: Context): List<SimSlot> {
         val out = ArrayList<SimSlot>()
+        // Full details when phone-state permission is granted.
         runCatching {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return@runCatching
             val sm = context.getSystemService(SubscriptionManager::class.java) ?: return@runCatching
@@ -169,19 +192,32 @@ object ContactsSync {
             ) return@runCatching
             val subs = sm.activeSubscriptionInfoList ?: return@runCatching
             for (s in subs) {
-                val slot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) s.simSlotIndex else s.simSlotIndex
+                val slot = s.simSlotIndex
+                val subId = runCatching { s.subscriptionId }.getOrDefault(slot)
                 val carrier = listOfNotNull(
                     s.carrierName?.toString()?.takeIf { it.isNotBlank() },
                     s.displayName?.toString()?.takeIf { it.isNotBlank() }
                 ).firstOrNull() ?: "SIM ${slot + 1}"
-                val num = s.number?.takeIf { it.isNotBlank() }
+                val num = runCatching { s.number?.takeIf { it.isNotBlank() } }.getOrNull()
                 out.add(
                     SimSlot(
                         slot = slot,
+                        subId = subId,
                         label = "SIM ${slot + 1} ($carrier)",
                         detail = if (num != null) "$carrier • $num" else carrier
                     )
                 )
+            }
+        }
+        if (out.isNotEmpty()) return out.sortedBy { it.slot }.distinctBy { it.slot }
+        // No permission / OEM returned nothing: still show every SIM slot so SIM 2
+        // is never hidden. TelephonyManager.phoneCount needs no permission.
+        runCatching {
+            val tm = context.getSystemService(TelephonyManager::class.java)
+            val count = runCatching { tm?.phoneCount ?: 1 }.getOrDefault(1)
+            val n = count.coerceIn(1, 4)
+            for (slot in 0 until n) {
+                out.add(SimSlot(slot = slot, subId = slot, label = "SIM ${slot + 1}", detail = "SIM card"))
             }
         }
         return out.sortedBy { it.slot }.distinctBy { it.slot }
@@ -311,7 +347,7 @@ object ContactsSync {
         photoBytes: ByteArray?,
         destination: SaveDestination? = null
     ): Boolean {
-        if (destination?.isSim == true) return saveToSim(context, name, phone, destination.simSlot)
+        if (destination?.isSim == true) return saveToSim(context, name, phone, destination.simSlot, destination.simSubId)
         return try {
             val ops = ArrayList<ContentProviderOperation>()
             ops.add(
@@ -364,15 +400,20 @@ object ContactsSync {
     }
 
     /** SIM cards only store name + number, so photo is skipped there. */
-    private fun saveToSim(context: Context, name: String, phone: String, slot: Int): Boolean {
+    private fun saveToSim(context: Context, name: String, phone: String, slot: Int, subId: Int = -1): Boolean {
         val cleanName = name.trim().take(40)
         val cleanPhone = phone.filter { it.isDigit() || it == '+' }.trim()
         if (cleanName.isEmpty() || cleanPhone.filter { it.isDigit() }.length < 7) return false
-        // Try the SIM-slot-specific URI first, then the generic ones.
+        // Try the SIM-specific URI first (by subscription id, then slot), then generic ones.
         val bases = buildList {
+            if (subId >= 0) {
+                add("content://icc/adn/subId/$subId")
+                add("content://icc/adn/subscription/$subId")
+            }
             if (slot >= 0) {
                 add("content://icc/adn/subId/$slot")
                 add("content://icc/adn/sim$slot")
+                add("content://icc/adn/slot$slot")
             }
             add("content://icc/adn")
             add("content://sim/adn")
